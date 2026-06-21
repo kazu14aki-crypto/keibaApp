@@ -9,6 +9,8 @@
  * - サンプル数が最大4走と少ないため、過信せず「参考値」として扱うことを前提に設計している。
  */
 
+import { calcPedigreeScore } from './sireData';
+
 function parseRaceDate(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -159,14 +161,16 @@ export function calcFormScore(history, raceDate) {
 /**
  * 1頭分の自動採点結果をまとめて返す。
  */
-export function calcAutoFactorsFromHistory(horse, raceDate) {
+export function calcAutoFactorsFromHistory(horse, raceDate, race) {
   const jockeyResult = calcJockeyScore(horse.jockey, horse.history);
   const conditionResult = calcConditionScore(horse.history);
   const formResult = calcFormScore(horse.history, raceDate);
+  const pedigreeResult = calcPedigreeScore(horse.pedigree, race);
 
   return {
     jockey: jockeyResult,
     condition: conditionResult,
     form: formResult,
+    pedigree: pedigreeResult,
   };
 }

@@ -18,7 +18,7 @@ def gen_uuid() -> str:
     return str(uuid.uuid4())
 
 
-DEFAULT_FACTORS = {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0}
+DEFAULT_FACTORS = {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3}
 
 
 class Race(Base):
@@ -68,6 +68,7 @@ class Horse(Base):
     style: Mapped[str] = mapped_column(String, nullable=True, default="先行")
     last_time: Mapped[str] = mapped_column(String, nullable=True, default="")
     last_3f: Mapped[str] = mapped_column(String, nullable=True, default="")
+    current_weight: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
     result_rank: Mapped[str] = mapped_column(String, nullable=True, default="")
     note: Mapped[str] = mapped_column(Text, nullable=True, default="")
     factors: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: dict(DEFAULT_FACTORS))
@@ -88,6 +89,7 @@ class Horse(Base):
             "style": self.style,
             "last_time": self.last_time,
             "last_3f": self.last_3f,
+            "current_weight": self.current_weight or 0,
             "result_rank": self.result_rank,
             "note": self.note,
             "factors": self.factors or dict(DEFAULT_FACTORS),

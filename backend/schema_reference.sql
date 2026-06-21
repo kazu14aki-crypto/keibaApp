@@ -1,11 +1,20 @@
 -- ============================================================
 -- 参考資料：作成されるテーブルの構造
 --
--- このSQLを手動実行する必要はありません。
+-- 新規にテーブルを作る場合、このSQLを手動実行する必要はありません。
 -- バックエンド（FastAPI）の起動時に SQLAlchemy が自動的に
 -- 以下と同じ内容のテーブルを作成します（init_db関数）。
 --
--- 万一テーブル構造を手動確認・調整したい場合の参考としてご利用ください。
+-- ただし、Render上で「既にテーブルが存在する」状態のまま
+-- backend/app/db.py のモデルに新しいカラムを追加した場合、
+-- init_db() は既存テーブルへのカラム追加（マイグレーション）を
+-- 行わないため、手動でNeonのSQL Editorから ALTER TABLE を
+-- 実行する必要があります（このSQLを実行しないと、その新しい
+-- カラムを参照するAPIが500エラーになります）。
+--
+-- 現時点で必要なマイグレーション（未実行の場合は実行してください）:
+--   ALTER TABLE horses ADD COLUMN IF NOT EXISTS history JSONB;
+--   ALTER TABLE horses ADD COLUMN IF NOT EXISTS current_weight INTEGER DEFAULT 0;
 -- ============================================================
 
 create table if not exists races (
@@ -32,9 +41,11 @@ create table if not exists horses (
   style varchar default '先行',
   last_time varchar default '',
   last_3f varchar default '',
+  current_weight integer default 0,
   result_rank varchar default '',
   note text default '',
-  factors jsonb not null default '{"waku":0,"jockey":0,"pedigree":0,"time":0,"condition":0,"form":0}',
+  factors jsonb not null default '{"waku":0,"jockey":0,"pedigree":0,"time":0,"condition":0,"form":0,"season":3}',
+  history jsonb default '{"前走":null,"前々走":null,"3走前":null,"4走前":null}',
   created_at timestamp default now()
 );
 

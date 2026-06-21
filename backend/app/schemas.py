@@ -39,6 +39,7 @@ class HorseFactors(BaseModel):
     time: int = 0
     condition: int = 0
     form: int = 0
+    season: int = 3
 
 
 class HorseCreate(BaseModel):
@@ -50,6 +51,7 @@ class HorseCreate(BaseModel):
     style: str = "先行"
     last_time: Optional[str] = ""
     last_3f: Optional[str] = ""
+    current_weight: Optional[int] = 0
     note: Optional[str] = ""
     factors: HorseFactors = Field(default_factory=HorseFactors)
 
@@ -63,6 +65,7 @@ class HorseUpdate(BaseModel):
     style: Optional[str] = None
     last_time: Optional[str] = None
     last_3f: Optional[str] = None
+    current_weight: Optional[int] = None
     result_rank: Optional[str] = None
     note: Optional[str] = None
     factors: Optional[HorseFactors] = None

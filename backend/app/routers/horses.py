@@ -2,7 +2,7 @@ import csv
 import io
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from pydantic import BaseModel
 
 from app.db import get_db, Horse, Race
@@ -19,7 +19,7 @@ class JraUrlImport(BaseModel):
 
 
 def _empty_factors():
-    return {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0}
+    return {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3}
 
 
 @router.post("/race/{race_id}")
@@ -63,11 +63,11 @@ def delete_horse(horse_id: str, db: Session = Depends(get_db)):
 
 @router.get("/search")
 def search_horses(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
-    """馬名での横断検索。レース情報も合わせて返す。"""
+    """馬名・メモ欄（#タグ含む）での横断検索。レース情報も合わせて返す。"""
     stmt = (
         select(Horse)
         .options(joinedload(Horse.race))
-        .where(Horse.name.ilike(f"%{q}%"))
+        .where(or_(Horse.name.ilike(f"%{q}%"), Horse.note.ilike(f"%{q}%")))
         .order_by(Horse.created_at.desc())
         .limit(50)
     )

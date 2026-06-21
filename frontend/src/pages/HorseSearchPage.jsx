@@ -25,14 +25,14 @@ export default function HorseSearchPage() {
   return (
     <div>
       <h1 style={styles.h1}>馬名検索</h1>
-      <p style={styles.lead}>過去に登録した出走馬を馬名で横断検索します。同じ馬の過去の採点傾向を振り返るのに便利です。</p>
+      <p style={styles.lead}>過去に登録した出走馬を馬名・メモのタグで横断検索します。同じ馬の過去の採点傾向や「#夏弱」「#冬強」のようなタグを振り返るのに便利です。</p>
 
       <form onSubmit={search} style={{ ...styles.searchBox, marginTop: 24 }}>
         <input
           style={styles.searchInput}
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="馬名の一部を入力（例：ダノン）"
+          placeholder="馬名の一部、または #タグ で検索（例：ダノン、#夏弱）"
           autoFocus
         />
         <button type="submit" style={styles.primaryBtn} disabled={loading}>{loading ? '検索中…' : '検索'}</button>
@@ -60,6 +60,7 @@ export default function HorseSearchPage() {
                     {h.races?.date && ` ・ ${h.races.date}`}
                     {h.jockey && ` ・ ${h.jockey}`}
                   </div>
+                  {h.note && <div style={{ fontSize: 11.5, color: '#a87f2e', marginTop: 2 }}>{h.note}</div>}
                 </div>
               </div>
               <span style={styles.searchResultScore}>{totalScore(h.factors)}<small style={{ fontSize: 11, fontWeight: 400 }}>点</small></span>

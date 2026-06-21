@@ -125,6 +125,29 @@ def _normalize_table_rows(table) -> list:
     return grid
 
 
+def _extract_number_from_cell(cell) -> str:
+    """セルからテキストの数字を取得する。テキストが空の場合、
+    セル内の画像のalt属性やファイル名から数字を抽出するフォールバックを試みる。
+    """
+    if cell is None:
+        return ""
+    text = _cell_text(cell)
+    if text:
+        return text
+    # 画像のalt属性やsrcファイル名に数字が含まれていないか確認する
+    img = cell.find("img")
+    if img:
+        alt = img.get("alt", "")
+        m = re.search(r"(\d{1,2})", alt)
+        if m:
+            return m.group(1)
+        src = img.get("src", "")
+        m = re.search(r"(\d{1,2})", src)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def _cell_text(cell) -> str:
     if cell is None:
         return ""
@@ -148,15 +171,36 @@ def _parse_basic_info(detail_cell) -> dict:
     if record_match:
         record = f"{record_match.group(1)}-{record_match.group(2)}-{record_match.group(3)}-{record_match.group(4)}"
 
-    # 騎手・調教師: 馬名以降のリンクのうち、最後から2番目が騎手、最後が調教師であることが多い
+    # 騎手・調教師: リンク直後のテキストパターンで役割を判定する。
+    # 「(栗東)」「(美浦)」等の所属地名が続くリンクは調教師、
+    # 「(55.0)」のような斤量(数字.数字)が続くリンクは騎手とみなす。
     jockey = ""
     trainer = ""
-    if len(links) >= 2:
-        jockey = _clean_text(links[-2].get_text())
-        trainer = _clean_text(links[-1].get_text())
-    elif len(links) == 1 and name:
-        # リンクが馬名のみの場合（騎手未定など）
-        pass
+    for link in links[1:]:  # links[0] は馬名なのでスキップ
+        link_text = _clean_text(link.get_text())
+        if not link_text:
+            continue
+        # リンクの直後にある文字列を取得（次の数文字程度で判定すれば十分）
+        next_text = ""
+        nxt = link.next_sibling
+        steps = 0
+        while nxt is not None and steps < 5 and len(next_text) < 20:
+            if isinstance(nxt, str):
+                next_text += nxt
+            else:
+                break
+            nxt = nxt.next_sibling
+            steps += 1
+        next_text = next_text.strip()
+
+        if re.match(r"^[（(]\d{2}\.\d[)）]", next_text):
+            jockey = link_text
+        elif re.match(r"^[（(][^\d]", next_text):
+            trainer = link_text
+        elif not jockey:
+            # パターンに当てはまらない場合のフォールバック：
+            # 2つ目のリンクを騎手の最有力候補としておく（後続処理で上書きされる可能性あり）
+            jockey = link_text
 
     return {
         "name": name,
@@ -336,21 +380,30 @@ def parse_shutuba(html: str) -> dict:
     if not course_text:
         course_text = body_text[:3000]
 
-    dist_match = re.search(r"([\d,]{3,6})\s*m(?:ートル)?", course_text)
+    dist_match = re.search(r"([\d,]{3,6})\s*(?:m|メートル)", course_text)
     if dist_match:
         distance = int(dist_match.group(1).replace(",", ""))
     if "ダート" in course_text:
         surface = "ダート"
 
     track_names = ["札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"]
-    search_range = body_text[:600]  # レース名・コース情報に近い先頭部分のみを対象にする
-    earliest_pos = None
-    for t in track_names:
-        pos = search_range.find(t)
-        if pos != -1 and (earliest_pos is None or pos < earliest_pos[1]):
-            earliest_pos = (t, pos)
-    if earliest_pos:
-        track = earliest_pos[0]
+
+    # 優先パターン: 「3回東京6回」のような開催情報表記（h2見出しや回次表記に頻出）から競馬場名を抽出する。
+    # これは過去走データ内の競馬場名より確実に「今回開催される競馬場」を指す。
+    meeting_text = race_name + " " + body_text[:400]
+    track = ""
+    meeting_match = re.search(r"\d+回([札幌函館福島新潟東京中山中京京都阪神小倉]+)\d+日", meeting_text)
+    if meeting_match:
+        track = meeting_match.group(1)
+    else:
+        search_range = body_text[:600]
+        earliest_pos = None
+        for t in track_names:
+            pos = search_range.find(t)
+            if pos != -1 and (earliest_pos is None or pos < earliest_pos[1]):
+                earliest_pos = (t, pos)
+        if earliest_pos:
+            track = earliest_pos[0]
 
     horses = []
     table = soup.find("table")
@@ -359,6 +412,7 @@ def parse_shutuba(html: str) -> dict:
 
     grid = _normalize_table_rows(table)
     current_waku = None
+    fallback_num = 0
     i = 0
     while i < len(grid):
         cells = grid[i]
@@ -366,24 +420,38 @@ def parse_shutuba(html: str) -> dict:
             i += 1
             continue
 
-        waku_text = _cell_text(cells[0])
+        waku_text = _extract_number_from_cell(cells[0])
         waku_match = re.match(r"^(\d)$", waku_text)
         if waku_match:
             current_waku = int(waku_match.group(1))
 
-        num_text = _cell_text(cells[1])
+        num_text = _extract_number_from_cell(cells[1])
         num_match = re.match(r"^(\d{1,2})$", num_text)
 
-        if not num_match:
-            i += 1
-            continue
+        # detail_cell（馬名リンクを含むセル）をこの行の中から探す。
+        # レース種別によって列位置が変わる（重賞ページでは枠・馬番セルが
+        # 画像表示のみでテキストが空になることがある）ため、列番号に依存せず
+        # 「馬名らしきリンクを含むセル」を直接探索する。
+        detail_cell = None
+        detail_idx = None
+        for idx, c in enumerate(cells):
+            if c is None or idx < 2 and not num_match:
+                pass
+            if c is not None and c.find("a"):
+                cell_text = _cell_text(c)
+                # 「父：」「調教師所属」等を含む、馬名以降の情報が詰まったセルを基本情報セルとみなす
+                if re.search(r"父[：:]", cell_text) or re.search(r"/\s*[逃先差追]", cell_text):
+                    detail_cell = c
+                    detail_idx = idx
+                    break
 
-        num = int(num_match.group(1))
-        if not (1 <= num <= 18):
-            i += 1
-            continue
+        # 上記で見つからない場合、馬番セルの次にあるリンク付きセルを採用（従来ロジックのフォールバック）
+        if detail_cell is None and num_match:
+            candidate_idx = 2
+            if candidate_idx < len(cells) and cells[candidate_idx] is not None and cells[candidate_idx].find("a"):
+                detail_cell = cells[candidate_idx]
+                detail_idx = candidate_idx
 
-        detail_cell = cells[2] if len(cells) > 2 else None
         if detail_cell is None:
             i += 1
             continue
@@ -393,24 +461,58 @@ def parse_shutuba(html: str) -> dict:
             i += 1
             continue
 
+        # 騎手が基本情報セル内で見つからなかった場合、隣接セル（性齢/騎手セルなど）からも探す
+        if not basic["jockey"]:
+            for idx, c in enumerate(cells):
+                if idx == detail_idx or c is None:
+                    continue
+                jockey_link = c.find("a")
+                if jockey_link:
+                    jockey_text = _clean_text(jockey_link.get_text())
+                    cell_text = _cell_text(c)
+                    # 性齢・斤量と一緒に騎手名がある典型パターン（例: "栗4/牝 55.5kg [騎手]"）
+                    if re.search(r"\d{2}\.\d\s*kg", cell_text) or re.search(r"^\S{1,2}\d/", cell_text):
+                        basic["jockey"] = jockey_text
+                        break
+
+        # 血統情報: 基本情報セルから「父：○○ 母：○○」を抽出
+        pedigree = ""
+        detail_text_full = _cell_text(detail_cell)
+        sire_dam_match = re.search(r"父[：:]\s*([^\s]+)\s*母[：:]\s*([^\s(（]+)(?:[（(]母の父[：:]\s*([^\s)）]+)[)）])?", detail_text_full)
+        if sire_dam_match:
+            sire = sire_dam_match.group(1)
+            pedigree = f"{sire}系"
+
+        # 枠番・馬番が画像表示等でテキスト取得できない場合は出現順で連番を振る
+        if num_match:
+            num = int(num_match.group(1))
+        else:
+            fallback_num += 1
+            num = fallback_num
+        if not (1 <= num <= 18):
+            i += 1
+            continue
+
         history = {"前走": None, "前々走": None, "3走前": None, "4走前": None}
         if i + 1 < len(grid):
             next_cells = grid[i + 1]
             # 次の行が「新しい馬の基本情報行」かどうかを判定する。
-            # 基本情報行は必ず「detail_cell（馬名リンクを含むセル）」を持つため、
-            # その有無で判定する（列位置のズレに影響されない）。
-            next_has_horse_link = any(
-                c is not None and c.find("a") and re.search(r"/\s*[逃先差追]", _cell_text(c))
+            # 馬名リンクを含み、かつ過去走特有のキーワード（前走/なし等）を含まない行を新しい馬とみなす。
+            next_text_all = " ".join(_cell_text(c) for c in next_cells if c is not None)
+            next_has_horse = any(
+                c is not None and c.find("a") and (
+                    re.search(r"父[：:]", _cell_text(c)) or re.search(r"/\s*[逃先差追]", _cell_text(c))
+                )
                 for c in next_cells
             )
-            if not next_has_horse_link:
+            looks_like_history = ("前走" in next_text_all) or ("非開催" in next_text_all)
+
+            if not next_has_horse and looks_like_history:
                 candidates = [c for c in next_cells if c is not None]
                 if candidates:
                     history_cell = max(candidates, key=lambda c: len(_cell_text(c)))
-                    cell_text = _cell_text(history_cell)
-                    if "前走" in cell_text or "非開催" in cell_text:
-                        history = _parse_history(history_cell)
-                        i += 1
+                    history = _parse_history(history_cell)
+                    i += 1
 
         style = basic["style"] or infer_style_from_history(history)
 
@@ -419,7 +521,7 @@ def parse_shutuba(html: str) -> dict:
             "waku": current_waku or min(8, (num + 1) // 2),
             "name": basic["name"],
             "jockey": basic["jockey"],
-            "pedigree": "",
+            "pedigree": pedigree,
             "style": style,
             "history": history,
         })

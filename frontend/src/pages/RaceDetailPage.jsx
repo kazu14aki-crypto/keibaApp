@@ -65,7 +65,7 @@ export default function RaceDetailPage() {
     const updates = race.horses.map(h => {
       const wakuScore = calcWakuScore(h.waku, race.track, race.surface, race.distance);
       const timeResult = timeResults.get(h.id);
-      const historyResults = calcAutoFactorsFromHistory(h, race.date);
+      const historyResults = calcAutoFactorsFromHistory(h, race.date, race);
 
       const factors = {
         ...h.factors,
@@ -74,12 +74,13 @@ export default function RaceDetailPage() {
         jockey: historyResults.jockey.score,
         condition: historyResults.condition.score,
         form: historyResults.form.score,
+        pedigree: historyResults.pedigree.score,
       };
       return {
         id: h.id,
         factors,
         timeHasData: timeResult.hasData,
-        historyHasData: historyResults.jockey.hasData || historyResults.condition.hasData || historyResults.form.hasData,
+        historyHasData: historyResults.jockey.hasData || historyResults.condition.hasData || historyResults.form.hasData || historyResults.pedigree.hasData,
       };
     });
 
@@ -218,7 +219,7 @@ export default function RaceDetailPage() {
 
       {ranked.length > 0 && (
         <div style={styles.legendNote}>
-          採点は{MAX_TOTAL}点満点（枠順・騎手・血統・タイム指数 各20点、馬場適性・臨戦状態 各10点）。
+          採点は{MAX_TOTAL}点満点（枠順・騎手・血統・タイム指数 各20点、馬場適性・臨戦状態 各10点、季節・気温適性 5点）。
         </div>
       )}
 
@@ -321,6 +322,10 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
             <Field label="血統（父系統など）"><input style={styles.input} value={horse.pedigree} onChange={e => onUpdate({ pedigree: e.target.value })} placeholder="例：ディープインパクト系" /></Field>
             <Field label="前走タイム"><input style={styles.input} value={horse.last_time || ''} onChange={e => onUpdate({ last_time: e.target.value })} placeholder="例：2:09.3" /></Field>
             <Field label="前走上がり3F"><input style={styles.input} value={horse.last_3f || ''} onChange={e => onUpdate({ last_3f: e.target.value })} placeholder="例：33.8" /></Field>
+            <Field label="今回の馬体重">
+              <input style={styles.input} type="number" value={horse.current_weight || ''} onChange={e => onUpdate({ current_weight: Number(e.target.value) || 0 })} placeholder="例：462" />
+              <WeightDiffHint horse={horse} />
+            </Field>
             <Field label="結果着順（後日記録用）"><input style={styles.input} value={horse.result_rank || ''} onChange={e => onUpdate({ result_rank: e.target.value })} placeholder="例：1" /></Field>
           </div>
 
@@ -334,12 +339,50 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
           {horse.history && <PastRacesTable history={horse.history} />}
 
           <Field label="メモ" span={2}>
-            <textarea style={{ ...styles.input, minHeight: 50, resize: 'vertical' }} value={horse.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="調教評価・不利情報・市場の歪みなど自由記述" />
+            <textarea style={{ ...styles.input, minHeight: 50, resize: 'vertical' }} value={horse.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="調教評価・不利情報・市場の歪みなど自由記述（例：#夏弱 #冬強 などのタグを書くと馬名検索で横断検索できます）" />
           </Field>
 
           <button style={styles.deleteTextBtn} onClick={onDelete}>この馬を削除</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function WeightDiffHint({ horse }) {
+  const current = horse.current_weight;
+  const history = horse.history;
+  const lastRace = history?.['前走'];
+  const lastWeight = lastRace?.weight;
+
+  if (!current || !lastWeight) {
+    return <div style={{ fontSize: 11.5, color: '#9c9588', marginTop: 4 }}>前走馬体重との比較には、今回の馬体重と過去走データの両方が必要です</div>;
+  }
+
+  const diff = current - lastWeight;
+  const diffText = diff > 0 ? `+${diff}kg` : `${diff}kg`;
+  const diffColor = Math.abs(diff) >= 10 ? '#b3493f' : '#5a5448';
+
+  // 過去走の中に、似た増減幅（±4kg以内）で出走した例があれば参考表示する
+  const labels = ['前走', '前々走', '3走前', '4走前'];
+  const weights = labels.map(l => history[l]?.weight).filter(Boolean);
+  let similarNote = '';
+  for (let i = 0; i < weights.length - 1; i++) {
+    const pastDiff = weights[i] - weights[i + 1];
+    if (Math.abs(pastDiff - diff) <= 4) {
+      const rank = history[labels[i]]?.rank;
+      if (rank) {
+        similarNote = `参考：似た増減幅（${pastDiff > 0 ? '+' : ''}${pastDiff}kg）の時は${rank}着`;
+        break;
+      }
+    }
+  }
+
+  return (
+    <div style={{ fontSize: 11.5, marginTop: 4 }}>
+      <span style={{ color: diffColor, fontWeight: 600 }}>前走比 {diffText}</span>
+      {Math.abs(diff) >= 10 && <span style={{ color: '#b3493f' }}>（大幅増減）</span>}
+      {similarNote && <div style={{ color: '#9c9588', marginTop: 2 }}>{similarNote}</div>}
     </div>
   );
 }
