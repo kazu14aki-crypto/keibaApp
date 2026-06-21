@@ -11,6 +11,10 @@ export default function RaceDetailPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [editingHead, setEditingHead] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showUrlForm, setShowUrlForm] = useState(false);
+  const [jraUrl, setJraUrl] = useState('');
+  const [urlImporting, setUrlImporting] = useState(false);
+  const [urlError, setUrlError] = useState('');
   const fileInputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -69,6 +73,23 @@ export default function RaceDetailPage() {
     e.target.value = '';
   };
 
+  const handleJraUrlImport = async () => {
+    if (!jraUrl.trim()) return;
+    setUrlImporting(true);
+    setUrlError('');
+    try {
+      const res = await api.importJraUrl(raceId, jraUrl.trim());
+      showToast(`${res.imported}頭を取り込みました`);
+      setJraUrl('');
+      setShowUrlForm(false);
+      await load();
+    } catch (err) {
+      setUrlError(err.message || '取り込みに失敗しました。JRAサイトの構造が変わっている可能性があります。手動CSV取込みもお試しください。');
+    } finally {
+      setUrlImporting(false);
+    }
+  };
+
   const ranked = useMemo(() => {
     if (!race) return [];
     return [...race.horses].map(h => ({ ...h, score: totalScore(h.factors) })).sort((a, b) => b.score - a.score);
@@ -83,10 +104,33 @@ export default function RaceDetailPage() {
       <RaceHeader race={race} editing={editingHead} setEditing={setEditingHead} onUpdate={updateRaceHead} />
 
       <div style={styles.toolbar}>
+        <button style={styles.ghostBtn} onClick={() => setShowUrlForm(s => !s)}>
+          🔗 JRA出馬表URLから取り込む
+        </button>
         <button style={styles.ghostBtn} onClick={() => fileInputRef.current?.click()}>⇧ 出馬表CSVを取り込む</button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleFile} />
-        <span style={styles.toolbarHint}>馬番・枠番・馬名・騎手・血統・脚質の列を自動認識します（既存の出走馬は上書きされます）</span>
       </div>
+
+      {showUrlForm && (
+        <div style={{ ...styles.card, marginBottom: 18 }}>
+          <label style={styles.fieldLabel}>JRA公式サイトの出馬表ページURL</label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              style={{ ...styles.input, flex: '1 1 320px' }}
+              value={jraUrl}
+              onChange={e => setJraUrl(e.target.value)}
+              placeholder="https://www.jra.go.jp/JRADB/accessD.html?CNAME=..."
+            />
+            <button style={styles.primaryBtn} onClick={handleJraUrlImport} disabled={urlImporting}>
+              {urlImporting ? '取り込み中…' : '取り込む'}
+            </button>
+          </div>
+          {urlError && <div style={styles.errorText}>{urlError}</div>}
+          <div style={{ ...styles.toolbarHint, marginTop: 10 }}>
+            JRA公式サイトの出馬表ページ（jra.go.jp）のURLを貼り付けてください。馬番・枠番・馬名・騎手・血統を自動取得します（既存の出走馬は上書きされます）。脚質は自動取得できないため後で手動調整してください。サイト構造の変更により取得に失敗する場合は、CSV取込みをご利用ください。
+          </div>
+        </div>
+      )}
 
       <div style={styles.tableWrap} className="scrollbar">
         <div style={styles.tableHeadRow}>

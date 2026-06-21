@@ -63,6 +63,8 @@ export const api = {
     form.append('file', file);
     return request(`/horses/race/${raceId}/import-csv`, { method: 'POST', body: form });
   },
+  importJraUrl: (raceId, url) =>
+    request(`/horses/race/${raceId}/import-jra-url`, { method: 'POST', body: JSON.stringify({ url }) }),
 };
 
 export { ApiError };

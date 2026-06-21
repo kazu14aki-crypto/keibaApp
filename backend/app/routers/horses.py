@@ -3,13 +3,19 @@ import io
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
+from pydantic import BaseModel
 
 from app.db import get_db, Horse, Race
 from app.schemas import HorseCreate, HorseUpdate
+from app.jra_scraper import fetch_and_parse, JraFetchError
 
 router = APIRouter(prefix="/horses", tags=["horses"])
 
 STYLES = ["逃げ", "先行", "差し", "追込"]
+
+
+class JraUrlImport(BaseModel):
+    url: str
 
 
 def _empty_factors():
@@ -151,3 +157,63 @@ async def import_csv(race_id: str, file: UploadFile = File(...), db: Session = D
     for h in new_horses:
         db.refresh(h)
     return {"imported": len(new_horses), "horses": [h.to_dict() for h in new_horses]}
+
+
+@router.post("/race/{race_id}/import-jra-url")
+def import_from_jra_url(race_id: str, payload: JraUrlImport, db: Session = Depends(get_db)):
+    """JRA公式サイトの出馬表ページURLから出走馬を取り込む。
+
+    1回のリクエストにつきJRAサイトへのHTTPリクエストは1回のみ送信する
+    （連続巡回・大量取得は行わない設計）。
+    """
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="レースが見つかりません。")
+
+    try:
+        result = fetch_and_parse(payload.url)
+    except JraFetchError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    parsed = [
+        {
+            "num": h["num"],
+            "waku": h["waku"],
+            "name": h["name"],
+            "jockey": h["jockey"],
+            "pedigree": h["pedigree"],
+            "style": h["style"],
+            "last_time": "",
+            "last_3f": "",
+            "note": "",
+            "factors": _empty_factors(),
+        }
+        for h in result["horses"]
+    ]
+
+    # レース基本情報も取得できていれば反映（既存値が空の項目のみ補完）
+    race_patch = {}
+    if result.get("track") and not race.track:
+        race_patch["track"] = result["track"]
+    if result.get("surface"):
+        race_patch["surface"] = result["surface"]
+    if result.get("distance"):
+        race_patch["distance"] = result["distance"]
+    if result.get("race_name") and (not race.name or race.name == "無題のレース"):
+        race_patch["name"] = result["race_name"]
+    if race_patch:
+        for k, v in race_patch.items():
+            setattr(race, k, v)
+
+    db.query(Horse).filter(Horse.race_id == race_id).delete()
+    new_horses = [Horse(race_id=race_id, **h) for h in parsed]
+    db.add_all(new_horses)
+    db.commit()
+    for h in new_horses:
+        db.refresh(h)
+
+    return {
+        "imported": len(new_horses),
+        "horses": [h.to_dict() for h in new_horses],
+        "race_name": result.get("race_name", ""),
+    }
