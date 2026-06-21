@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { totalScore, MAX_TOTAL, FACTOR_DEFS, TRACKS, SURFACES, CONDITIONS, STYLES, wakuColor } from '../lib/scoring';
 import { calcWakuScore, getCourseRule } from '../lib/courseData';
 import { calcAutoFactorsFromHistory } from '../lib/historyScore';
+import { evaluateRaceTime } from '../lib/timeIndex';
 import { styles } from '../styles';
 
 export default function RaceDetailPage() {
@@ -290,7 +291,6 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
         <div style={{ ...styles.td, width: 44, fontFamily: 'JetBrains Mono, monospace', color: '#9c9588' }}>{horse.num}</div>
         <div style={{ ...styles.td, flex: '1 1 160px', textAlign: 'left', fontWeight: 700 }}>
           {horse.name || <span style={{ color: '#6b655a' }}>未入力</span>}
-          {!horse.last_3f && <span style={{ marginLeft: 6, fontSize: 10, color: '#b3493f', fontWeight: 600 }} title="上がり3F未入力：タイム指数は自動計算されません">⚠上3F未入力</span>}
         </div>
         <div style={{ ...styles.td, flex: '1 1 120px', textAlign: 'left', color: '#b9b2a3' }}>{horse.jockey || '—'}</div>
         <div style={{ ...styles.td, width: 110 }}>
@@ -317,7 +317,6 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
               </select>
             </Field>
             <Field label="血統（父系統など）"><input style={styles.input} value={horse.pedigree} onChange={e => onUpdate({ pedigree: e.target.value })} placeholder="例：ディープインパクト系" /></Field>
-            <Field label="前走上がり3F"><input style={styles.input} value={horse.last_3f || ''} onChange={e => onUpdate({ last_3f: e.target.value })} placeholder="例：33.8" /></Field>
             <Field label="今回の馬体重">
               <input style={styles.input} type="number" value={horse.current_weight || ''} onChange={e => onUpdate({ current_weight: Number(e.target.value) || 0 })} placeholder="例：462" />
               <WeightDiffHint horse={horse} />
@@ -408,23 +407,31 @@ function PastRacesTable({ history }) {
               <th style={{ padding: '4px 8px' }}>コース</th>
               <th style={{ padding: '4px 8px' }}>馬場</th>
               <th style={{ padding: '4px 8px' }}>着順</th>
-              <th style={{ padding: '4px 8px' }}>上3F</th>
+              <th style={{ padding: '4px 8px' }}>タイム評価</th>
               <th style={{ padding: '4px 8px' }}>騎手</th>
             </tr>
           </thead>
           <tbody>
-            {races.map(({ label, race }) => (
-              <tr key={label} style={{ borderTop: '1px solid #e3e0d6' }}>
-                <td style={{ padding: '4px 8px', color: '#a87f2e', fontWeight: 700 }}>{label}</td>
-                <td style={{ padding: '4px 8px' }}>{race.date || '—'}</td>
-                <td style={{ padding: '4px 8px' }}>{race.track || '—'}</td>
-                <td style={{ padding: '4px 8px' }}>{race.surface}{race.distance || ''}</td>
-                <td style={{ padding: '4px 8px' }}>{race.condition || '—'}</td>
-                <td style={{ padding: '4px 8px' }}>{race.rank ? `${race.rank}着/${race.headcount}頭` : '—'}</td>
-                <td style={{ padding: '4px 8px' }}>{race.last_3f || '—'}</td>
-                <td style={{ padding: '4px 8px' }}>{race.jockey || '—'}</td>
-              </tr>
-            ))}
+            {races.map(({ label, race }) => {
+              const timeEval = evaluateRaceTime(race);
+              const levelLabel = {
+                excellent: '◎優秀', good: '○良好', average: '△平均', below: '▽平均以下',
+              }[timeEval.level] || '—';
+              return (
+                <tr key={label} style={{ borderTop: '1px solid #e3e0d6' }}>
+                  <td style={{ padding: '4px 8px', color: '#a87f2e', fontWeight: 700 }}>{label}</td>
+                  <td style={{ padding: '4px 8px' }}>{race.date || '—'}</td>
+                  <td style={{ padding: '4px 8px' }}>{race.track || '—'}</td>
+                  <td style={{ padding: '4px 8px' }}>{race.surface}{race.distance || ''}</td>
+                  <td style={{ padding: '4px 8px' }}>{race.condition || '—'}</td>
+                  <td style={{ padding: '4px 8px' }}>{race.rank ? `${race.rank}着/${race.headcount}頭` : '—'}</td>
+                  <td style={{ padding: '4px 8px' }} title={timeEval.hasData ? `基準タイム差 ${timeEval.diffSec > 0 ? '+' : ''}${timeEval.diffSec}秒` : timeEval.reason}>
+                    {timeEval.hasData ? levelLabel : '—'}
+                  </td>
+                  <td style={{ padding: '4px 8px' }}>{race.jockey || '—'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

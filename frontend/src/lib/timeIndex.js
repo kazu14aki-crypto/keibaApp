@@ -20,7 +20,7 @@ const CLASS_KEYWORDS = [
   { tier: '1勝', keywords: ['1勝', '500万', '５００万'] },
   { tier: '2勝', keywords: ['2勝', '1000万', '１０００万'] },
   { tier: '3勝', keywords: ['3勝', '1600万', '１６００万'] },
-  { tier: 'OP', keywords: ['オープン', 'OP', 'リステッド', '重賞', 'G1', 'G2', 'G3', 'GⅠ', 'GⅡ', 'GⅢ', 'ステークス', 'ハンデ'] },
+  { tier: 'OP', keywords: ['オープン', 'OP', 'リステッド', '重賞', 'G1', 'G2', 'G3', 'GⅠ', 'GⅡ', 'GⅢ', 'GI', 'GII', 'GIII', 'ステークス', 'ハンデ'] },
 ];
 
 export function inferClassTier(className) {
@@ -28,8 +28,10 @@ export function inferClassTier(className) {
   for (const { tier, keywords } of CLASS_KEYWORDS) {
     if (keywords.some(k => className.includes(k))) return tier;
   }
-  // レース名が「○○S」「○○C」「○○記念」のような固有名詞型（OP・重賞）かどうかを判定
-  if (/[SC記念杯賞]$/.test(className.trim())) return 'OP';
+  // レース名が「○○S」「○○C」「○○記念」「○○賞」「○○杯」のような固有名詞型（OP・重賞）かどうかを判定。
+  // 末尾にグレード表記（GIII等）が付加されている場合はそれを除いた上で末尾文字を見る。
+  const stripped = className.trim().replace(/G(I{1,3}|Ⅰ{1,3}|[1-3])$/i, '').trim();
+  if (/[SC記念杯賞]$/.test(stripped)) return 'OP';
   return null;
 }
 

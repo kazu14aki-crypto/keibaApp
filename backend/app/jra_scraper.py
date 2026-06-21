@@ -171,36 +171,44 @@ def _parse_basic_info(detail_cell) -> dict:
     if record_match:
         record = f"{record_match.group(1)}-{record_match.group(2)}-{record_match.group(3)}-{record_match.group(4)}"
 
-    # 騎手・調教師: リンク直後のテキストパターンで役割を判定する。
-    # 「(栗東)」「(美浦)」等の所属地名が続くリンクは調教師、
-    # 「(55.0)」のような斤量(数字.数字)が続くリンクは騎手とみなす。
+    # 騎手・調教師の判定は、detail_cell内のリンク数によってページパターンを判別する。
+    # - 重賞パターン: リンクは「馬名・調教師」の2つのみ。騎手は別セル（性齢/騎手セル）にある。
+    # - 未勝利戦パターン: リンクは「馬名・騎手・調教師」の3つ。騎手の直後に斤量「(57.0)」、
+    #   調教師の直後に所属地名「(栗東)」が続く。
     jockey = ""
     trainer = ""
-    for link in links[1:]:  # links[0] は馬名なのでスキップ
-        link_text = _clean_text(link.get_text())
-        if not link_text:
-            continue
-        # リンクの直後にある文字列を取得（次の数文字程度で判定すれば十分）
-        next_text = ""
-        nxt = link.next_sibling
-        steps = 0
-        while nxt is not None and steps < 5 and len(next_text) < 20:
-            if isinstance(nxt, str):
-                next_text += nxt
-            else:
-                break
-            nxt = nxt.next_sibling
-            steps += 1
-        next_text = next_text.strip()
+    other_links = links[1:]  # links[0] は馬名
 
-        if re.match(r"^[（(]\d{2}\.\d[)）]", next_text):
-            jockey = link_text
-        elif re.match(r"^[（(][^\d]", next_text):
-            trainer = link_text
-        elif not jockey:
-            # パターンに当てはまらない場合のフォールバック：
-            # 2つ目のリンクを騎手の最有力候補としておく（後続処理で上書きされる可能性あり）
-            jockey = link_text
+    if len(other_links) <= 1:
+        # 重賞パターン: 残り1つのリンクは確実に調教師。騎手はここでは確定できないため、
+        # 呼び出し元（メインループ）の隣接セル探索に委ねる。
+        if other_links:
+            trainer = _clean_text(other_links[0].get_text())
+    else:
+        # 未勝利戦パターン（リンクが2つ以上残っている）: 直後のテキストパターンで役割を判定する。
+        for link in other_links:
+            link_text = _clean_text(link.get_text())
+            if not link_text:
+                continue
+            next_text = ""
+            nxt = link.next_sibling
+            steps = 0
+            while nxt is not None and steps < 5 and len(next_text) < 20:
+                if isinstance(nxt, str):
+                    next_text += nxt
+                else:
+                    break
+                nxt = nxt.next_sibling
+                steps += 1
+            next_text = next_text.strip()
+
+            if re.match(r"^[（(]\d{2}\.\d[)）]", next_text):
+                jockey = link_text
+            elif re.match(r"^[（(][^\d]", next_text):
+                trainer = link_text
+            elif not jockey and not trainer:
+                # パターンに当てはまらない場合、最初に見つかったものを騎手の暫定候補とする
+                jockey = link_text
 
     return {
         "name": name,
@@ -287,9 +295,11 @@ def _parse_one_race_segment(segment: str) -> dict:
     if weight_match:
         result["weight"] = int(weight_match.group(1))
 
-    corner_match = re.search(r"((?:\d{1,2}-)+\d{1,2})\s*3F", segment)
+    # 通過順表示: 「3 3」のように半角スペース区切り、または「3-3」のようにハイフン区切りの数字列。
+    # 末尾に「3F」が続く直前のパターンを通過順とみなす。
+    corner_match = re.search(r"((?:\d{1,2}[\s-]+)+\d{1,2})\s*3F", segment)
     if corner_match:
-        result["corner_positions"] = corner_match.group(1)
+        result["corner_positions"] = re.sub(r"[\s-]+", "-", corner_match.group(1).strip())
 
     last3f_match = re.search(r"3F\s*(\d{2}\.\d)", segment)
     if last3f_match:
@@ -411,6 +421,21 @@ def parse_shutuba(html: str) -> dict:
         raise JraFetchError("出走馬テーブルが見つかりませんでした。ページ構造が変更された可能性があります。")
 
     grid = _normalize_table_rows(table)
+
+    # ヘッダー行から「前走」「前々走」「3走前」「4走前」の列インデックスを特定する。
+    # 重賞ページ等では各列が独立しており、同じ行内に過去4走分の情報が横並びで存在するため、
+    # ここで列位置を把握しておき、行ごとの処理で直接参照する。
+    history_col_map = {}
+    if grid:
+        header_cells = grid[0]
+        for idx, c in enumerate(header_cells):
+            if c is None:
+                continue
+            header_text = _cell_text(c)
+            for label in ["前走", "前々走", "3走前", "4走前"]:
+                if header_text == label or header_text.startswith(label):
+                    history_col_map.setdefault(label, idx)
+
     current_waku = None
     fallback_num = 0
     i = 0
@@ -485,8 +510,16 @@ def parse_shutuba(html: str) -> dict:
                 jockey_link = c.find("a")
                 if jockey_link:
                     jockey_text = _clean_text(jockey_link.get_text())
-                    # 性齢・斤量と一緒に騎手名がある典型パターン（例: "栗4/牝 55.5kg [騎手]"）
-                    if re.search(r"\d{2}\.\d\s*kg", cell_text) or re.search(r"^\S{1,2}\d\s*/", cell_text):
+                    # 性齢・斤量と一緒に騎手名がある典型パターン（例: "牡4/鹿毛 55.5kg [騎手]"）
+                    is_typical_jockey_cell = (
+                        re.search(r"\d{2}\.\d\s*kg", cell_text)
+                        or re.search(r"^\S{1,2}\d\s*/", cell_text)
+                    )
+                    # detail_cellの直後セルで、かつそのセル内のリンクが1つだけの場合は
+                    # 上記パターンに厳密一致しなくても騎手とみなす（最も信頼できる位置のため）
+                    is_immediate_next = (detail_idx is not None and idx == detail_idx + 1)
+                    only_one_link = len(c.find_all("a")) == 1
+                    if is_typical_jockey_cell or (is_immediate_next and only_one_link):
                         basic["jockey"] = jockey_text
                         break
 
@@ -509,10 +542,20 @@ def parse_shutuba(html: str) -> dict:
             continue
 
         history = {"前走": None, "前々走": None, "3走前": None, "4走前": None}
-        if i + 1 < len(grid):
+
+        # 方式1: ヘッダーで特定した列インデックスから、同じ行内の対応セルを直接読む
+        # （重賞ページ等、1行に1頭の全情報が収まっている構造で機能する）
+        if history_col_map:
+            for label, col_idx in history_col_map.items():
+                if col_idx < len(cells) and cells[col_idx] is not None:
+                    cell_text = _cell_text(cells[col_idx])
+                    if cell_text and ("非開催" not in cell_text) and len(cell_text) > 5:
+                        history[label] = _parse_one_race_segment(cell_text)
+
+        # 方式2（フォールバック）: 同一行内に見つからなかった場合、次の行が
+        # 過去走情報の続きである可能性を確認する（未勝利戦等、rowspan構造のページ向け）
+        if all(v is None for v in history.values()) and i + 1 < len(grid):
             next_cells = grid[i + 1]
-            # 次の行が「新しい馬の基本情報行」かどうかを判定する。
-            # 馬名リンクを含み、かつ過去走特有のキーワード（前走/なし等）を含まない行を新しい馬とみなす。
             next_text_all = " ".join(_cell_text(c) for c in next_cells if c is not None)
             next_has_horse = any(
                 c is not None and c.find("a") and (
