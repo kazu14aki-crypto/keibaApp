@@ -246,7 +246,14 @@ def _split_past_races(history_text: str) -> dict:
 
 
 def _parse_one_race_segment(segment: str) -> dict:
-    """1走分のテキストセグメントを構造化データに変換する。"""
+    """1走分のテキストセグメントを構造化データに変換する。
+
+    実データ上の並び順（例）:
+    「2026年5月17日 東京 府中牝馬S GⅢ 18着 18頭5番1番人気 戸崎圭太 56.0kg
+      1800芝 1:31.8 良 106 504kg 1313 3F 33.2 エンブロイダー(0.9)」
+    のように、タイムの直後に「馬場状態」「レーティング(数字、重賞のみ)」「馬体重」の順で並ぶ。
+    騎手名は「距離+芝/ダート」表記の直前、斤量(kg)表記の直前に位置する。
+    """
     if not segment or segment[:4].strip() in ("なし", "前走非開催") or "非開催" in segment[:8]:
         return None
 
@@ -265,25 +272,49 @@ def _parse_one_race_segment(segment: str) -> dict:
     if track_match:
         result["track"] = track_match.group(1)
 
-    surf_dist_match = re.search(r"(芝|ダート)\s*(\d{3,4})", segment)
-    if surf_dist_match:
-        result["surface"] = "ダート" if surf_dist_match.group(1) == "ダート" else "芝"
-        result["distance"] = int(surf_dist_match.group(2))
+    # クラス名: 「[○○S]」のようなmarkdownリンク表記、または競馬場名の直後に続く
+    # レース名（次に着順や頭数の数字が来るまでの文字列）から抽出する。
+    class_match = re.search(r"\[([^\]]+)\]", segment)
+    if class_match:
+        result["class_name"] = class_match.group(1)
+    elif track_match:
+        after_track = segment[track_match.end():]
+        # 競馬場名の直後から、最初に現れる「○着」または「○頭」の手前までをレース名候補とする
+        name_match = re.match(r"\s*([^\d]{2,20}?)(?=\s*\d{1,2}着|\s*\d{1,2}頭)", after_track)
+        if name_match:
+            candidate = _clean_text(name_match.group(1))
+            # グレード表記（GⅠ/GⅡ/GⅢ等）が混じっていても許容する
+            if candidate and candidate not in ("良", "稍重", "重", "不良"):
+                result["class_name"] = candidate
 
-    cond_match = re.search(r"(良|稍重|重|不良)\s*\d{1,2}頭", segment)
-    if cond_match:
-        result["condition"] = cond_match.group(1)
+    # 距離・芝/ダート: 「1800芝」のように数字が先のパターンと、
+    # 「ダート1800」のように種別が先のパターンの両方に対応する。
+    surf_dist_match = re.search(r"(\d{3,4})\s*(芝|ダート|ダ)(?!\w)", segment)
+    if surf_dist_match:
+        result["distance"] = int(surf_dist_match.group(1))
+        result["surface"] = "ダート" if surf_dist_match.group(2) in ("ダート", "ダ") else "芝"
+    else:
+        surf_dist_match = re.search(r"(芝|ダート)\s*(\d{3,4})", segment)
+        if surf_dist_match:
+            result["surface"] = "ダート" if surf_dist_match.group(1) == "ダート" else "芝"
+            result["distance"] = int(surf_dist_match.group(2))
 
     headcount_match = re.search(r"(\d{1,2})頭", segment)
     if headcount_match:
         result["headcount"] = int(headcount_match.group(1))
 
     after_headcount = segment[headcount_match.end():] if headcount_match else segment
-    rank_match = re.match(r"\s*(\d{1,2})着", after_headcount)
-    if rank_match:
-        result["rank"] = int(rank_match.group(1))
+    rank_match = re.match(r"\s*(\d{1,2})\s*番?\s*\d*\s*着|\s*(\d{1,2})着", after_headcount)
+    # 「○頭」の直前に「○着」が来るケース（着順が頭数より前に出現するページもあるため両対応）
+    rank_before_match = re.search(r"(\d{1,2})着\s*\d{1,2}頭", segment)
+    if rank_before_match:
+        result["rank"] = int(rank_before_match.group(1))
+    elif rank_match:
+        g = rank_match.group(1) or rank_match.group(2)
+        if g:
+            result["rank"] = int(g)
 
-    pop_match = re.search(r"(\d{1,2})番人気", segment[:30])
+    pop_match = re.search(r"(\d{1,2})番人気", segment[:60])
     if pop_match:
         result["popularity"] = int(pop_match.group(1))
 
@@ -295,6 +326,26 @@ def _parse_one_race_segment(segment: str) -> dict:
     if weight_match:
         result["weight"] = int(weight_match.group(1))
 
+    # 馬場状態: タイムの直後（重賞ではこの後にレーティング数字が続くこともある）、
+    # または距離・種別表記の直後（未勝利戦等のページ構造）のいずれかから取得する。
+    cond_found = False
+    if time_match:
+        after_time = segment[time_match.end():]
+        cond_match = re.match(r"\s*(良|稍重|重|不良)", after_time)
+        if cond_match:
+            result["condition"] = cond_match.group(1)
+            cond_found = True
+    if not cond_found:
+        cond_match2 = re.search(r"(?:芝|ダート|ダ)\s*(良|稍重|重|不良)", segment)
+        if cond_match2:
+            result["condition"] = cond_match2.group(1)
+            cond_found = True
+    if not cond_found and surf_dist_match:
+        after_surf = segment[surf_dist_match.end():]
+        cond_match3 = re.match(r"\s*(良|稍重|重|不良)", after_surf)
+        if cond_match3:
+            result["condition"] = cond_match3.group(1)
+
     # 通過順表示: 「3 3」のように半角スペース区切り、または「3-3」のようにハイフン区切りの数字列。
     # 末尾に「3F」が続く直前のパターンを通過順とみなす。
     corner_match = re.search(r"((?:\d{1,2}[\s-]+)+\d{1,2})\s*3F", segment)
@@ -305,18 +356,28 @@ def _parse_one_race_segment(segment: str) -> dict:
     if last3f_match:
         result["last_3f"] = last3f_match.group(1)
 
-    class_match = re.search(r"\[([^\]]+)\]", segment)
-    if class_match:
-        result["class_name"] = class_match.group(1)
-
-    if time_match and weight_match:
-        between = _clean_text(segment[time_match.end():weight_match.start()])
-        if between:
-            result["jockey"] = between
-
-    jockey_name_match = re.search(r"kg\s*([^\s(（0-9][^\s(（]*)\s*[(（]\d{2}\.\d[)）]", segment)
-    if jockey_name_match:
-        result["jockey"] = jockey_name_match.group(1)
+    # 騎手名: 「斤量(kg)表記の直前」、または「(57.0)のような斤量括弧表記の直前」にある
+    # 人名らしき文字列。姓と名の間にスペースが入ることがあるため、直前から逆方向に
+    # 全角/半角スペース区切りの語を最大2つまで含める。
+    jockey_found = False
+    weight_kg_match = re.search(r"([^\s0-9(（]+(?:[ \u3000][^\s0-9(（]+)?)\s*\d{2}\.\d\s*kg", segment)
+    if weight_kg_match:
+        candidate = _clean_text(weight_kg_match.group(1))
+        if candidate and candidate not in ("良", "稍重", "重", "不良"):
+            result["jockey"] = candidate
+            jockey_found = True
+    if not jockey_found:
+        # 「(57.0)」の直前にある語を逆方向に取得し、もし"kg"を含んでいたら
+        # それより後ろの部分だけを候補とする（"500kg 横山琉人"のような連結を分離するため）
+        bracket_match = re.search(r"([^(（]{1,20})[（(]\d{2}\.\d[)）]", segment)
+        if bracket_match:
+            raw_candidate = bracket_match.group(1)
+            # 末尾の空白を除いた上で、"kg"が含まれていればそれ以降の部分のみを使う
+            if "kg" in raw_candidate:
+                raw_candidate = raw_candidate.rsplit("kg", 1)[-1]
+            candidate = _clean_text(raw_candidate)
+            if candidate and candidate not in ("良", "稍重", "重", "不良"):
+                result["jockey"] = candidate
 
     return result
 
