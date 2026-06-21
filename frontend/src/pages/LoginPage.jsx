@@ -29,8 +29,8 @@ export default function LoginPage() {
   return (
     <div style={styles.loginWrap}>
       <div style={styles.loginCard}>
-        <div style={styles.loginMark}>桐</div>
-        <div style={styles.loginTitle}>KIRISCORE</div>
+        <div style={styles.loginMark}>馬</div>
+        <div style={styles.loginTitle}>競走馬スコアリング</div>
         <div style={styles.loginSub}>独自採点 馬券分析台帳</div>
         <form onSubmit={submit}>
           <label style={styles.fieldLabel}>パスワード</label>

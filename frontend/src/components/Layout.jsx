@@ -16,9 +16,9 @@ export default function Layout({ children }) {
       <header style={styles.header}>
         <div style={styles.headerInner}>
           <div style={styles.brand} onClick={() => navigate('/')}>
-            <span style={styles.brandMark}>桐</span>
+            <span style={styles.brandMark}>馬</span>
             <div>
-              <div style={styles.brandTitle}>KIRI<span style={{ color: '#c4a35a' }}>SCORE</span></div>
+              <div style={styles.brandTitle}>競走馬スコアリング</div>
               <div style={styles.brandSub}>独自採点 馬券分析台帳</div>
             </div>
           </div>

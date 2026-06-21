@@ -7,7 +7,7 @@ from app.schemas import LoginRequest, LoginResponse
 from app.db import init_db
 from app.routers import races, horses
 
-app = FastAPI(title="KiriScore API")
+app = FastAPI(title="競走馬スコアリング API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,7 +25,7 @@ def on_startup():
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "service": "KiriScore API"}
+    return {"status": "ok", "service": "競走馬スコアリング API"}
 
 
 @app.post("/auth/login", response_model=LoginResponse)
