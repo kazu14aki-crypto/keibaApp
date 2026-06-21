@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { totalScore, MAX_TOTAL, FACTOR_DEFS, TRACKS, SURFACES, CONDITIONS, STYLES, wakuColor } from '../lib/scoring';
+import { calcWakuScore, getCourseRule } from '../lib/courseData';
+import { calcTimeScores } from '../lib/autoScore';
 import { styles } from '../styles';
 
 export default function RaceDetailPage() {
@@ -53,6 +55,39 @@ export default function RaceDetailPage() {
     const factors = { ...horse.factors, [key]: value };
     setRace(r => ({ ...r, horses: r.horses.map(h => h.id === horseId ? { ...h, factors } : h) }));
     await api.updateHorse(horseId, { factors });
+  };
+
+  const autoCalculate = async () => {
+    if (!race.horses.length) return;
+
+    const timeResults = calcTimeScores(race.horses);
+    const updates = race.horses.map(h => {
+      const wakuScore = calcWakuScore(h.waku, race.track, race.surface, race.distance);
+      const timeResult = timeResults.get(h.id);
+      const factors = {
+        ...h.factors,
+        waku: wakuScore,
+        time: timeResult.hasData ? timeResult.score : h.factors.time,
+      };
+      return { id: h.id, factors, timeHasData: timeResult.hasData };
+    });
+
+    setRace(r => ({
+      ...r,
+      horses: r.horses.map(h => {
+        const u = updates.find(x => x.id === h.id);
+        return u ? { ...h, factors: u.factors } : h;
+      }),
+    }));
+
+    await Promise.all(updates.map(u => api.updateHorse(u.id, { factors: u.factors })));
+
+    const noDataCount = updates.filter(u => !u.timeHasData).length;
+    if (noDataCount > 0) {
+      showToast(`枠順適性・タイム指数を自動計算しました（上がり3F未入力の${noDataCount}頭は手動評価が必要です）`);
+    } else {
+      showToast('枠順適性・タイム指数を自動計算しました');
+    }
   };
 
   const deleteHorse = async (horseId) => {
@@ -109,6 +144,14 @@ export default function RaceDetailPage() {
         </button>
         <button style={styles.ghostBtn} onClick={() => fileInputRef.current?.click()}>⇧ 出馬表CSVを取り込む</button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleFile} />
+        <button style={styles.primaryBtn} onClick={autoCalculate}>⚡ 枠順・タイム指数を自動計算</button>
+      </div>
+
+      <div style={styles.toolbarHint}>
+        {(() => {
+          const rule = getCourseRule(race.track, race.surface, race.distance);
+          return `このコースの傾向：${rule.note}`;
+        })()}
       </div>
 
       {showUrlForm && (
@@ -231,7 +274,10 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
       <div style={styles.horseRow} onClick={onToggle}>
         <div style={{ ...styles.td, width: 44 }}><span style={{ ...styles.wakuChip, ...wakuColor(horse.waku) }}>{horse.waku}</span></div>
         <div style={{ ...styles.td, width: 44, fontFamily: 'JetBrains Mono, monospace', color: '#9c9588' }}>{horse.num}</div>
-        <div style={{ ...styles.td, flex: '1 1 160px', textAlign: 'left', fontWeight: 700 }}>{horse.name || <span style={{ color: '#6b655a' }}>未入力</span>}</div>
+        <div style={{ ...styles.td, flex: '1 1 160px', textAlign: 'left', fontWeight: 700 }}>
+          {horse.name || <span style={{ color: '#6b655a' }}>未入力</span>}
+          {!horse.last_3f && <span style={{ marginLeft: 6, fontSize: 10, color: '#b3493f', fontWeight: 600 }} title="上がり3F未入力：タイム指数は自動計算されません">⚠上3F未入力</span>}
+        </div>
         <div style={{ ...styles.td, flex: '1 1 120px', textAlign: 'left', color: '#b9b2a3' }}>{horse.jockey || '—'}</div>
         <div style={{ ...styles.td, width: 110 }}>
           <div style={styles.scoreWrap}>
@@ -281,14 +327,37 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
 }
 
 function FactorSlider({ def, value, onChange }) {
+  const [showGuide, setShowGuide] = useState(false);
+  const hasGuide = def.guide && def.guide.length > 0;
+
   return (
-    <div style={styles.factorRow}>
-      <div style={styles.factorLabelWrap}>
-        <span style={styles.factorLabel}>{def.label}</span>
-        <span style={styles.factorHint}>{def.hint}</span>
+    <div>
+      <div style={styles.factorRow}>
+        <div style={styles.factorLabelWrap}>
+          <span style={styles.factorLabel}>
+            {def.label}
+            {def.auto && <span style={{ marginLeft: 6, fontSize: 10, color: '#a87f2e', fontWeight: 700 }}>自動可</span>}
+          </span>
+          <span style={styles.factorHint}>
+            {def.hint}
+            {hasGuide && (
+              <span
+                onClick={() => setShowGuide(s => !s)}
+                style={{ color: '#a87f2e', cursor: 'pointer', marginLeft: 6, fontWeight: 700 }}
+              >
+                {showGuide ? '判断材料を閉じる ▲' : '判断材料を見る ▼'}
+              </span>
+            )}
+          </span>
+        </div>
+        <input type="range" min={0} max={def.max} value={value} onChange={e => onChange(Number(e.target.value))} style={{ flex: 1 }} />
+        <span style={styles.factorValue}>{value}<small>/{def.max}</small></span>
       </div>
-      <input type="range" min={0} max={def.max} value={value} onChange={e => onChange(Number(e.target.value))} style={{ flex: 1 }} />
-      <span style={styles.factorValue}>{value}<small>/{def.max}</small></span>
+      {hasGuide && showGuide && (
+        <ul style={{ margin: '0 0 14px', paddingLeft: 184, fontSize: 12, color: '#7a7468', lineHeight: 1.8 }}>
+          {def.guide.map((g, i) => <li key={i}>{g}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
