@@ -10,6 +10,7 @@
  */
 
 import { calcPedigreeScore } from './sireData';
+import { calcTimeIndexFromHistory } from './timeIndex';
 
 function parseRaceDate(dateStr) {
   if (!dateStr) return null;
@@ -166,11 +167,13 @@ export function calcAutoFactorsFromHistory(horse, raceDate, race) {
   const conditionResult = calcConditionScore(horse.history);
   const formResult = calcFormScore(horse.history, raceDate);
   const pedigreeResult = calcPedigreeScore(horse.pedigree, race);
+  const timeResult = calcTimeIndexFromHistory(horse.history);
 
   return {
     jockey: jockeyResult,
     condition: conditionResult,
     form: formResult,
     pedigree: pedigreeResult,
+    time: timeResult,
   };
 }

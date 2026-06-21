@@ -461,17 +461,32 @@ def parse_shutuba(html: str) -> dict:
             i += 1
             continue
 
-        # 騎手が基本情報セル内で見つからなかった場合、隣接セル（性齢/騎手セルなど）からも探す
+        # 騎手が基本情報セル内で見つからなかった場合、隣接セル（性齢/騎手セルなど）からも探す。
+        # 過去走情報セル（前走/前々走など）には別の騎手名が含まれているため、必ず除外する。
+        # 優先順位: detail_idxの直後のセル → それ以外の非過去走セル、の順に探す。
         if not basic["jockey"]:
-            for idx, c in enumerate(cells):
-                if idx == detail_idx or c is None:
+            def is_history_cell(cell_text):
+                return ("前走" in cell_text) or ("非開催" in cell_text) or ("なし" in cell_text[:10])
+
+            candidate_indices = []
+            if detail_idx is not None:
+                candidate_indices.append(detail_idx + 1)
+            candidate_indices += [idx for idx in range(len(cells)) if idx not in candidate_indices and idx != detail_idx]
+
+            for idx in candidate_indices:
+                if idx < 0 or idx >= len(cells):
+                    continue
+                c = cells[idx]
+                if c is None:
+                    continue
+                cell_text = _cell_text(c)
+                if is_history_cell(cell_text):
                     continue
                 jockey_link = c.find("a")
                 if jockey_link:
                     jockey_text = _clean_text(jockey_link.get_text())
-                    cell_text = _cell_text(c)
                     # 性齢・斤量と一緒に騎手名がある典型パターン（例: "栗4/牝 55.5kg [騎手]"）
-                    if re.search(r"\d{2}\.\d\s*kg", cell_text) or re.search(r"^\S{1,2}\d/", cell_text):
+                    if re.search(r"\d{2}\.\d\s*kg", cell_text) or re.search(r"^\S{1,2}\d\s*/", cell_text):
                         basic["jockey"] = jockey_text
                         break
 

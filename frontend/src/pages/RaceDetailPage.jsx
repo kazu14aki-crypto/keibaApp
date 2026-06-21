@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { totalScore, MAX_TOTAL, FACTOR_DEFS, TRACKS, SURFACES, CONDITIONS, STYLES, wakuColor } from '../lib/scoring';
 import { calcWakuScore, getCourseRule } from '../lib/courseData';
-import { calcTimeScores } from '../lib/autoScore';
 import { calcAutoFactorsFromHistory } from '../lib/historyScore';
 import { styles } from '../styles';
 
@@ -61,16 +60,14 @@ export default function RaceDetailPage() {
   const autoCalculate = async () => {
     if (!race.horses.length) return;
 
-    const timeResults = calcTimeScores(race.horses);
     const updates = race.horses.map(h => {
       const wakuScore = calcWakuScore(h.waku, race.track, race.surface, race.distance);
-      const timeResult = timeResults.get(h.id);
       const historyResults = calcAutoFactorsFromHistory(h, race.date, race);
 
       const factors = {
         ...h.factors,
         waku: wakuScore,
-        time: timeResult.hasData ? timeResult.score : h.factors.time,
+        time: historyResults.time.hasData ? historyResults.time.score : h.factors.time,
         jockey: historyResults.jockey.score,
         condition: historyResults.condition.score,
         form: historyResults.form.score,
@@ -79,7 +76,7 @@ export default function RaceDetailPage() {
       return {
         id: h.id,
         factors,
-        timeHasData: timeResult.hasData,
+        timeHasData: historyResults.time.hasData,
         historyHasData: historyResults.jockey.hasData || historyResults.condition.hasData || historyResults.form.hasData || historyResults.pedigree.hasData,
       };
     });
@@ -97,7 +94,7 @@ export default function RaceDetailPage() {
     const noTimeDataCount = updates.filter(u => !u.timeHasData).length;
     const noHistoryDataCount = updates.filter(u => !u.historyHasData).length;
     const notes = [];
-    if (noTimeDataCount > 0) notes.push(`上がり3F未入力${noTimeDataCount}頭`);
+    if (noTimeDataCount > 0) notes.push(`タイム評価できない過去走${noTimeDataCount}頭`);
     if (noHistoryDataCount > 0) notes.push(`過去走データなし${noHistoryDataCount}頭`);
 
     if (notes.length > 0) {
@@ -320,7 +317,6 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
               </select>
             </Field>
             <Field label="血統（父系統など）"><input style={styles.input} value={horse.pedigree} onChange={e => onUpdate({ pedigree: e.target.value })} placeholder="例：ディープインパクト系" /></Field>
-            <Field label="前走タイム"><input style={styles.input} value={horse.last_time || ''} onChange={e => onUpdate({ last_time: e.target.value })} placeholder="例：2:09.3" /></Field>
             <Field label="前走上がり3F"><input style={styles.input} value={horse.last_3f || ''} onChange={e => onUpdate({ last_3f: e.target.value })} placeholder="例：33.8" /></Field>
             <Field label="今回の馬体重">
               <input style={styles.input} type="number" value={horse.current_weight || ''} onChange={e => onUpdate({ current_weight: Number(e.target.value) || 0 })} placeholder="例：462" />
