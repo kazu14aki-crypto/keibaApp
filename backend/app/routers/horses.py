@@ -183,10 +183,11 @@ def import_from_jra_url(race_id: str, payload: JraUrlImport, db: Session = Depen
             "jockey": h["jockey"],
             "pedigree": h["pedigree"],
             "style": h["style"],
-            "last_time": "",
-            "last_3f": "",
+            "last_time": (h.get("history") or {}).get("前走", {}).get("time", "") if (h.get("history") or {}).get("前走") else "",
+            "last_3f": (h.get("history") or {}).get("前走", {}).get("last_3f", "") if (h.get("history") or {}).get("前走") else "",
             "note": "",
             "factors": _empty_factors(),
+            "history": h.get("history") or {"前走": None, "前々走": None, "3走前": None, "4走前": None},
         }
         for h in result["horses"]
     ]

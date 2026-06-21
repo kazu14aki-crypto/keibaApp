@@ -71,6 +71,7 @@ class Horse(Base):
     result_rank: Mapped[str] = mapped_column(String, nullable=True, default="")
     note: Mapped[str] = mapped_column(Text, nullable=True, default="")
     factors: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: dict(DEFAULT_FACTORS))
+    history: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {"前走": None, "前々走": None, "3走前": None, "4走前": None})
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     race: Mapped["Race"] = relationship(back_populates="horses")
@@ -90,6 +91,7 @@ class Horse(Base):
             "result_rank": self.result_rank,
             "note": self.note,
             "factors": self.factors or dict(DEFAULT_FACTORS),
+            "history": self.history or {"前走": None, "前々走": None, "3走前": None, "4走前": None},
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_race and self.race:

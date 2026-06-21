@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { totalScore, MAX_TOTAL, FACTOR_DEFS, TRACKS, SURFACES, CONDITIONS, STYLES, wakuColor } from '../lib/scoring';
 import { calcWakuScore, getCourseRule } from '../lib/courseData';
 import { calcTimeScores } from '../lib/autoScore';
+import { calcAutoFactorsFromHistory } from '../lib/historyScore';
 import { styles } from '../styles';
 
 export default function RaceDetailPage() {
@@ -64,12 +65,22 @@ export default function RaceDetailPage() {
     const updates = race.horses.map(h => {
       const wakuScore = calcWakuScore(h.waku, race.track, race.surface, race.distance);
       const timeResult = timeResults.get(h.id);
+      const historyResults = calcAutoFactorsFromHistory(h, race.date);
+
       const factors = {
         ...h.factors,
         waku: wakuScore,
         time: timeResult.hasData ? timeResult.score : h.factors.time,
+        jockey: historyResults.jockey.score,
+        condition: historyResults.condition.score,
+        form: historyResults.form.score,
       };
-      return { id: h.id, factors, timeHasData: timeResult.hasData };
+      return {
+        id: h.id,
+        factors,
+        timeHasData: timeResult.hasData,
+        historyHasData: historyResults.jockey.hasData || historyResults.condition.hasData || historyResults.form.hasData,
+      };
     });
 
     setRace(r => ({
@@ -82,11 +93,16 @@ export default function RaceDetailPage() {
 
     await Promise.all(updates.map(u => api.updateHorse(u.id, { factors: u.factors })));
 
-    const noDataCount = updates.filter(u => !u.timeHasData).length;
-    if (noDataCount > 0) {
-      showToast(`枠順適性・タイム指数を自動計算しました（上がり3F未入力の${noDataCount}頭は手動評価が必要です）`);
+    const noTimeDataCount = updates.filter(u => !u.timeHasData).length;
+    const noHistoryDataCount = updates.filter(u => !u.historyHasData).length;
+    const notes = [];
+    if (noTimeDataCount > 0) notes.push(`上がり3F未入力${noTimeDataCount}頭`);
+    if (noHistoryDataCount > 0) notes.push(`過去走データなし${noHistoryDataCount}頭`);
+
+    if (notes.length > 0) {
+      showToast(`枠順・タイム・騎手・馬場・臨戦状態を自動計算しました（${notes.join('、')}は手動評価を推奨）`);
     } else {
-      showToast('枠順適性・タイム指数を自動計算しました');
+      showToast('枠順・タイム・騎手・馬場・臨戦状態を自動計算しました');
     }
   };
 
@@ -144,7 +160,7 @@ export default function RaceDetailPage() {
         </button>
         <button style={styles.ghostBtn} onClick={() => fileInputRef.current?.click()}>⇧ 出馬表CSVを取り込む</button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleFile} />
-        <button style={styles.primaryBtn} onClick={autoCalculate}>⚡ 枠順・タイム指数を自動計算</button>
+        <button style={styles.primaryBtn} onClick={autoCalculate}>⚡ 採点基準を自動計算（全項目）</button>
       </div>
 
       <div style={styles.toolbarHint}>
@@ -315,6 +331,8 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
             ))}
           </div>
 
+          {horse.history && <PastRacesTable history={horse.history} />}
+
           <Field label="メモ" span={2}>
             <textarea style={{ ...styles.input, minHeight: 50, resize: 'vertical' }} value={horse.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="調教評価・不利情報・市場の歪みなど自由記述" />
           </Field>
@@ -322,6 +340,55 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
           <button style={styles.deleteTextBtn} onClick={onDelete}>この馬を削除</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function PastRacesTable({ history }) {
+  const labels = ['前走', '前々走', '3走前', '4走前'];
+  const races = labels.map(label => ({ label, race: history[label] })).filter(r => r.race);
+
+  if (races.length === 0) {
+    return (
+      <div style={{ ...styles.factorSection, fontSize: 12.5, color: '#9c9588' }}>
+        過去走データなし（JRA出馬表URL取込みで自動取得されます）
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.factorSection}>
+      <div style={styles.factorSectionTitle}>過去4走（JRA出馬表より自動取得・採点の参考値の根拠）</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ color: '#9c9588', textAlign: 'left' }}>
+              <th style={{ padding: '4px 8px' }}></th>
+              <th style={{ padding: '4px 8px' }}>日付</th>
+              <th style={{ padding: '4px 8px' }}>競馬場</th>
+              <th style={{ padding: '4px 8px' }}>コース</th>
+              <th style={{ padding: '4px 8px' }}>馬場</th>
+              <th style={{ padding: '4px 8px' }}>着順</th>
+              <th style={{ padding: '4px 8px' }}>上3F</th>
+              <th style={{ padding: '4px 8px' }}>騎手</th>
+            </tr>
+          </thead>
+          <tbody>
+            {races.map(({ label, race }) => (
+              <tr key={label} style={{ borderTop: '1px solid #e3e0d6' }}>
+                <td style={{ padding: '4px 8px', color: '#a87f2e', fontWeight: 700 }}>{label}</td>
+                <td style={{ padding: '4px 8px' }}>{race.date || '—'}</td>
+                <td style={{ padding: '4px 8px' }}>{race.track || '—'}</td>
+                <td style={{ padding: '4px 8px' }}>{race.surface}{race.distance || ''}</td>
+                <td style={{ padding: '4px 8px' }}>{race.condition || '—'}</td>
+                <td style={{ padding: '4px 8px' }}>{race.rank ? `${race.rank}着/${race.headcount}頭` : '—'}</td>
+                <td style={{ padding: '4px 8px' }}>{race.last_3f || '—'}</td>
+                <td style={{ padding: '4px 8px' }}>{race.jockey || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
