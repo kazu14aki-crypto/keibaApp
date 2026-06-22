@@ -342,6 +342,9 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
               <WeightDiffHint horse={horse} />
             </Field>
             <Field label="着順記録"><input style={{ ...styles.input, fontSize: 12, width: 50 }} value={horse.result_rank || ''} onChange={e => onUpdate({ result_rank: e.target.value })} placeholder="1" /></Field>
+            <Field label="同コース通算" style={{ flex: '1 1 120px' }}>
+              <input style={{ ...styles.input, fontSize: 12 }} value={horse.course_record || ''} onChange={e => onUpdate({ course_record: e.target.value })} placeholder="例: 2-1-0-3（1着-2着-3着-着外）" />
+            </Field>
           </div>
 
           <div style={styles.factorSection}>

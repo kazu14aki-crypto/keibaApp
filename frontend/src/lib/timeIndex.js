@@ -206,15 +206,17 @@ export function evaluateRaceTime(race) {
   if (seconds === null) return { hasData: false, reason: 'タイム形式を解釈できません' };
 
   const tier = inferClassTier(race.class_name);
-  if (!tier) return { hasData: false, reason: 'クラス帯を特定できません' };
+  // class_nameが不明な場合はOP相当として評価（JRAページでレース名が取得できなかったケース）
+  const effectiveTier = tier || 'OP';
+  const tierNote = tier ? '' : '（クラス不明のためOP相当で推定）';
 
   const key = `${race.track}_${race.surface}_${race.distance}`;
   const table = BASE_TIMES[key];
-  if (!table || table[tier] === undefined) {
-    return { hasData: false, reason: `基準タイム未収録（${key} / ${tier}）` };
+  if (!table || table[effectiveTier] === undefined) {
+    return { hasData: false, reason: `基準タイム未収録（${key}）` };
   }
 
-  const baseTime = table[tier];
+  const baseTime = table[effectiveTier];
   const adjustedBase = baseTime + conditionAdjustmentSec(race.condition, race.distance);
   const diffSec = adjustedBase - seconds; // 正なら基準より速い
 
@@ -223,7 +225,7 @@ export function evaluateRaceTime(race) {
   else if (diffSec >= 0.3) level = 'good';
   else if (diffSec <= -1.0) level = 'below';
 
-  return { hasData: true, diffSec: Math.round(diffSec * 10) / 10, level, tier, baseTime: adjustedBase, source: 'base_time' };
+  return { hasData: true, diffSec: Math.round(diffSec * 10) / 10, level, tier: effectiveTier, baseTime: adjustedBase, source: 'base_time', tierNote };
 }
 
 /**

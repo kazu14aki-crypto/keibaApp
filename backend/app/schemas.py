@@ -71,6 +71,7 @@ class HorseUpdate(BaseModel):
     current_weight: Optional[int] = None
     current_impost: Optional[float] = None
     result_rank: Optional[str] = None
+    course_record: Optional[str] = None
     note: Optional[str] = None
     factors: Optional[HorseFactors] = None
 

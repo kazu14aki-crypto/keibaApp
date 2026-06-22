@@ -71,6 +71,7 @@ class Horse(Base):
     current_weight: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
     current_impost: Mapped[float] = mapped_column(Float, nullable=True, default=0.0)
     result_rank: Mapped[str] = mapped_column(String, nullable=True, default="")
+    course_record: Mapped[str] = mapped_column(String, nullable=True, default="")  # 例: "2-1-0-3" (1着-2着-3着-着外)
     note: Mapped[str] = mapped_column(Text, nullable=True, default="")
     factors: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: dict(DEFAULT_FACTORS))
     history: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {"前走": None, "前々走": None, "3走前": None, "4走前": None})
@@ -93,6 +94,7 @@ class Horse(Base):
             "current_weight": self.current_weight or 0,
             "current_impost": self.current_impost or 0.0,
             "result_rank": self.result_rank,
+            "course_record": self.course_record or "",
             "note": self.note,
             "factors": self.factors or dict(DEFAULT_FACTORS),
             "history": self.history or {"前走": None, "前々走": None, "3走前": None, "4走前": None},

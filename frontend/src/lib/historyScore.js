@@ -152,10 +152,33 @@ export function calcConditionScore(history, currentCondition) {
 
 /**
  * 同コース実績（オプション評価）。
- * 今回の競馬場・芝ダートと同じコースでの着順率を計算する。
+ * course_record（手動入力の通算成績 "2-1-0-3" 形式）が入力されていればそちらを優先。
+ * なければ過去4走から同コースを検索して評価する。
  */
-export function calcSameCourseScore(history, currentTrack, currentSurface) {
+export function calcSameCourseScore(history, currentTrack, currentSurface, courseRecord) {
   if (!currentTrack) return { score: 10, hasData: false, reason: "コース情報なし（中立値）" };
+
+  // 手動入力の通算成績が優先（"1着-2着-3着-着外" の形式: "2-1-0-3"）
+  if (courseRecord && courseRecord.trim()) {
+    const parts = courseRecord.trim().split('-').map(n => parseInt(n, 10));
+    if (parts.length >= 2 && !parts.some(isNaN)) {
+      const [w, p2, p3, rest] = parts;
+      const total = parts.reduce((a, b) => a + b, 0);
+      if (total > 0) {
+        const winRate = w / total;
+        const renRate = (w + (p2 || 0)) / total;
+        const fukuRate = (w + (p2 || 0) + (p3 || 0)) / total;
+        // 連対率・複勝率を総合してスコア化
+        const score = Math.min(20, Math.round(winRate * 12 + renRate * 5 + fukuRate * 3));
+        return {
+          score,
+          hasData: true,
+          source: 'manual',
+          reason: `${currentTrack}${currentSurface}通算 ${courseRecord}（${total}戦${w}勝 連対率${Math.round(renRate*100)}%）`,
+        };
+      }
+    }
+  }
   const races = validHistory(history);
   const sameCourse = races.filter(r =>
     r.track === currentTrack && r.surface === currentSurface && r.rank > 0 && r.headcount > 0
@@ -293,7 +316,7 @@ export function calcAutoFactorsFromHistory(horse, raceDate, race) {
   const pedigreeResult = calcPedigreeScore(horse.pedigree, race);
   const timeResult = calcTimeIndexFromHistory(horse.history);
   const impostResult = calcImpostScore(horse.current_impost, horse.history);
-  const sameCourseResult = calcSameCourseScore(horse.history, race?.track, race?.surface);
+  const sameCourseResult = calcSameCourseScore(horse.history, race?.track, race?.surface, horse.course_record);
 
   return {
     jockey: jockeyResult,
