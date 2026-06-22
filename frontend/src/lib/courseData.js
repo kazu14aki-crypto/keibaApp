@@ -114,6 +114,8 @@ export function getCourseRule(track, surface, distance) {
 /**
  * 枠番から枠順適性スコア（0〜20点）を計算する。
  * favorWaku/strengthに応じて、有利な枠ほど高得点・不利な枠ほど減点する。
+ * neutralコースでも、内枠はわずかに紛れが少なく堅実、外枠はわずかに展開の自由度がある
+ * という一般論を踏まえ、ごく小さな傾きを残す（完全な横一線にはしない）。
  */
 export function calcWakuScore(waku, track, surface, distance) {
   const rule = getCourseRule(track, surface, distance);
@@ -128,6 +130,9 @@ export function calcWakuScore(waku, track, surface, distance) {
     adj = -position * swing; // 内枠(positionが負)で加点
   } else if (rule.favorWaku === "outer") {
     adj = position * swing; // 外枠(positionが正)で加点
+  } else {
+    // neutralの場合も、内枠の堅実さをごくわずかに加点する（傾きを小さく残す）
+    adj = -position * 1;
   }
 
   const score = Math.round(base + adj);

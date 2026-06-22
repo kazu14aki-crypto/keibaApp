@@ -160,6 +160,44 @@ export function calcFormScore(history, raceDate) {
 }
 
 /**
+ * 斤量スコアを計算する（0〜10点）。
+ * 今回の斤量が軽いほど高評価、重いほど低評価。
+ * 加えて、前走比で斤量が減った（ハンデ戦等）場合は加点、増えた場合は減点。
+ * 基準値: 55.0kg（牝馬55kg/牡馬56kgの重賞を参考にした目安中心値）
+ */
+function calcImpostScore(currentImpost, history) {
+  if (!currentImpost || currentImpost === 0) {
+    return { score: 5, hasData: false, reason: '斤量データなし（中立値）' };
+  }
+
+  // 今回の絶対的な重さによる基本スコア（55kg基準、1kg差で±1点）
+  const BASE_KG = 55.0;
+  const diffFromBase = BASE_KG - currentImpost;
+  let baseScore = Math.round(5 + diffFromBase * 1.5);
+  baseScore = Math.max(1, Math.min(9, baseScore));
+
+  // 前走比の斤量変化による加減点
+  const prevImpost = history?.['前走']?.impost;
+  let changeBonus = 0;
+  let changeReason = '';
+  if (prevImpost && prevImpost > 0) {
+    const kgDiff = prevImpost - currentImpost; // 正なら今回が軽い
+    if (kgDiff >= 1) {
+      changeBonus = 1;
+      changeReason = `前走比${kgDiff}kg減`;
+    } else if (kgDiff <= -1) {
+      changeBonus = -1;
+      changeReason = `前走比${Math.abs(kgDiff)}kg増`;
+    }
+  }
+
+  const score = Math.max(0, Math.min(10, baseScore + changeBonus));
+  const reason = `今回${currentImpost}kg（基準55kg比${diffFromBase > 0 ? '+' : ''}${diffFromBase.toFixed(1)}kg）${changeReason ? ' / ' + changeReason : ''}`;
+
+  return { score, hasData: true, reason };
+}
+
+/**
  * 1頭分の自動採点結果をまとめて返す。
  */
 export function calcAutoFactorsFromHistory(horse, raceDate, race) {
@@ -168,6 +206,7 @@ export function calcAutoFactorsFromHistory(horse, raceDate, race) {
   const formResult = calcFormScore(horse.history, raceDate);
   const pedigreeResult = calcPedigreeScore(horse.pedigree, race);
   const timeResult = calcTimeIndexFromHistory(horse.history);
+  const impostResult = calcImpostScore(horse.current_impost, horse.history);
 
   return {
     jockey: jockeyResult,
@@ -175,5 +214,6 @@ export function calcAutoFactorsFromHistory(horse, raceDate, race) {
     form: formResult,
     pedigree: pedigreeResult,
     time: timeResult,
+    impost: impostResult,
   };
 }

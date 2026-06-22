@@ -73,6 +73,7 @@ export default function RaceDetailPage() {
         condition: historyResults.condition.score,
         form: historyResults.form.score,
         pedigree: historyResults.pedigree.score,
+        impost: historyResults.impost.hasData ? historyResults.impost.score : h.factors.impost,
       };
       return {
         id: h.id,
@@ -409,6 +410,7 @@ function PastRacesTable({ history }) {
               <th style={{ padding: '4px 8px' }}>着順</th>
               <th style={{ padding: '4px 8px' }}>タイム評価</th>
               <th style={{ padding: '4px 8px' }}>騎手</th>
+              <th style={{ padding: '4px 8px' }}>斤量</th>
             </tr>
           </thead>
           <tbody>
@@ -425,10 +427,11 @@ function PastRacesTable({ history }) {
                   <td style={{ padding: '4px 8px' }}>{race.surface}{race.distance || ''}</td>
                   <td style={{ padding: '4px 8px' }}>{race.condition || '—'}</td>
                   <td style={{ padding: '4px 8px' }}>{race.rank ? `${race.rank}着/${race.headcount}頭` : '—'}</td>
-                  <td style={{ padding: '4px 8px' }} title={timeEval.hasData ? `基準タイム差 ${timeEval.diffSec > 0 ? '+' : ''}${timeEval.diffSec}秒` : timeEval.reason}>
+                  <td style={{ padding: '4px 8px' }} title={timeEval.hasData ? (timeEval.source === 'rating' ? `JRAレーティング${timeEval.rating}に基づく評価` : `基準タイム差 ${timeEval.diffSec > 0 ? '+' : ''}${timeEval.diffSec}秒`) : timeEval.reason}>
                     {timeEval.hasData ? levelLabel : '—'}
                   </td>
                   <td style={{ padding: '4px 8px' }}>{race.jockey || '—'}</td>
+                  <td style={{ padding: '4px 8px' }}>{race.impost ? `${race.impost}kg` : '—'}</td>
                 </tr>
               );
             })}

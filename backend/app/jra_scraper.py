@@ -261,6 +261,7 @@ def _parse_one_race_segment(segment: str) -> dict:
         "date": "", "track": "", "class_name": "", "surface": "", "distance": 0,
         "condition": "", "headcount": 0, "rank": 0, "popularity": 0,
         "time": "", "weight": 0, "jockey": "", "corner_positions": "", "last_3f": "",
+        "rating": 0, "impost": 0.0,
     }
 
     date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", segment)
@@ -329,12 +330,14 @@ def _parse_one_race_segment(segment: str) -> dict:
     # 馬場状態: タイムの直後（重賞ではこの後にレーティング数字が続くこともある）、
     # または距離・種別表記の直後（未勝利戦等のページ構造）のいずれかから取得する。
     cond_found = False
+    cond_end_pos = None
     if time_match:
         after_time = segment[time_match.end():]
         cond_match = re.match(r"\s*(良|稍重|重|不良)", after_time)
         if cond_match:
             result["condition"] = cond_match.group(1)
             cond_found = True
+            cond_end_pos = time_match.end() + cond_match.end()
     if not cond_found:
         cond_match2 = re.search(r"(?:芝|ダート|ダ)\s*(良|稍重|重|不良)", segment)
         if cond_match2:
@@ -345,6 +348,14 @@ def _parse_one_race_segment(segment: str) -> dict:
         cond_match3 = re.match(r"\s*(良|稍重|重|不良)", after_surf)
         if cond_match3:
             result["condition"] = cond_match3.group(1)
+
+    # レーティング（重賞のみ付与される強さ指数）: 馬場状態の直後、馬体重(kg)表記の手前に
+    # 単独で現れる2〜3桁の数字。未勝利戦等では付与されないため、見つからなければ0のまま。
+    if cond_end_pos is not None and weight_match:
+        between_cond_weight = segment[cond_end_pos:weight_match.start()]
+        rating_match = re.search(r"(\d{2,3})", between_cond_weight)
+        if rating_match:
+            result["rating"] = int(rating_match.group(1))
 
     # 通過順表示: 「3 3」のように半角スペース区切り、または「3-3」のようにハイフン区切りの数字列。
     # 末尾に「3F」が続く直前のパターンを通過順とみなす。
@@ -360,16 +371,17 @@ def _parse_one_race_segment(segment: str) -> dict:
     # 人名らしき文字列。姓と名の間にスペースが入ることがあるため、直前から逆方向に
     # 全角/半角スペース区切りの語を最大2つまで含める。
     jockey_found = False
-    weight_kg_match = re.search(r"([^\s0-9(（]+(?:[ \u3000][^\s0-9(（]+)?)\s*\d{2}\.\d\s*kg", segment)
+    weight_kg_match = re.search(r"([^\s0-9(（]+(?:[ \u3000][^\s0-9(（]+)?)\s*(\d{2}\.\d)\s*kg", segment)
     if weight_kg_match:
         candidate = _clean_text(weight_kg_match.group(1))
         if candidate and candidate not in ("良", "稍重", "重", "不良"):
             result["jockey"] = candidate
             jockey_found = True
+        result["impost"] = float(weight_kg_match.group(2))
     if not jockey_found:
         # 「(57.0)」の直前にある語を逆方向に取得し、もし"kg"を含んでいたら
         # それより後ろの部分だけを候補とする（"500kg 横山琉人"のような連結を分離するため）
-        bracket_match = re.search(r"([^(（]{1,20})[（(]\d{2}\.\d[)）]", segment)
+        bracket_match = re.search(r"([^(（]{1,20})[（(](\d{2}\.\d)[)）]", segment)
         if bracket_match:
             raw_candidate = bracket_match.group(1)
             # 末尾の空白を除いた上で、"kg"が含まれていればそれ以降の部分のみを使う
@@ -378,6 +390,8 @@ def _parse_one_race_segment(segment: str) -> dict:
             candidate = _clean_text(raw_candidate)
             if candidate and candidate not in ("良", "稍重", "重", "不良"):
                 result["jockey"] = candidate
+            if not result["impost"]:
+                result["impost"] = float(bracket_match.group(2))
 
     return result
 
@@ -550,6 +564,7 @@ def parse_shutuba(html: str) -> dict:
         # 騎手が基本情報セル内で見つからなかった場合、隣接セル（性齢/騎手セルなど）からも探す。
         # 過去走情報セル（前走/前々走など）には別の騎手名が含まれているため、必ず除外する。
         # 優先順位: detail_idxの直後のセル → それ以外の非過去走セル、の順に探す。
+        current_impost = 0.0
         if not basic["jockey"]:
             def is_history_cell(cell_text):
                 return ("前走" in cell_text) or ("非開催" in cell_text) or ("なし" in cell_text[:10])
@@ -582,6 +597,10 @@ def parse_shutuba(html: str) -> dict:
                     only_one_link = len(c.find_all("a")) == 1
                     if is_typical_jockey_cell or (is_immediate_next and only_one_link):
                         basic["jockey"] = jockey_text
+                        # 同じセル内にある今回の斤量（例: "54.0kg"）も同時に取得する
+                        impost_match = re.search(r"(\d{2}\.\d)\s*kg", cell_text)
+                        if impost_match:
+                            current_impost = float(impost_match.group(1))
                         break
 
         # 血統情報: 基本情報セルから「父：○○ 母：○○」を抽出
@@ -643,6 +662,7 @@ def parse_shutuba(html: str) -> dict:
             "pedigree": pedigree,
             "style": style,
             "history": history,
+            "current_impost": current_impost,
         })
 
         i += 1

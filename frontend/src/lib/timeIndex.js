@@ -71,7 +71,9 @@ const BASE_TIMES = {
   '中京_ダート_1800': { '新馬': 116.0, '未勝利': 114.8, '1勝': 113.7, '2勝': 113.2, '3勝': 112.6, 'OP': 111.9 },
 
   '新潟_芝_1600': { '新馬': 94.5, '未勝利': 93.8, '1勝': 93.0, '2勝': 92.6, '3勝': 92.2, 'OP': 91.6 },
+  '新潟_芝_1800': { '新馬': 107.5, '未勝利': 106.7, '1勝': 105.9, '2勝': 105.4, '3勝': 105.0, 'OP': 104.4 },
   '新潟_芝_2000': { '新馬': 121.0, '未勝利': 120.0, '1勝': 119.1, '2勝': 118.6, '3勝': 118.0, 'OP': 117.3 },
+  '新潟_ダート_1800': { '新馬': 115.5, '未勝利': 114.3, '1勝': 113.2, '2勝': 112.7, '3勝': 112.1, 'OP': 111.4 },
 
   '福島_芝_1800': { '新馬': 111.0, '未勝利': 110.2, '1勝': 109.3, '2勝': 108.8, '3勝': 108.2, 'OP': 107.5 },
   '福島_芝_2000': { '新馬': 124.5, '未勝利': 123.3, '1勝': 122.2, '2勝': 121.6, '3勝': 121.0, 'OP': 120.2 },
@@ -103,13 +105,39 @@ function conditionAdjustmentSec(condition, distance) {
 }
 
 /**
- * 1走分の走破タイムを、競馬場・距離・クラス・馬場状態を加味して評価する。
- * 戻り値: { diffSec, level, hasData }
- *   diffSec: 基準タイムとの差（秒）。正の値ほど基準より速い（優秀）。
+ * 1走分の走破タイムを評価する。
+ * JRAレーティング（重賞のみ付与される、そのレースの絶対的な強さを示す指数。
+ * 100前後を平均的な強さの基準とし、高いほど強いレースだったことを示す）が
+ * 取得できている場合はそれを最優先で使う（基準タイムDBより精度が高いため）。
+ * レーティングがない場合は、競馬場・距離・クラス別の基準タイムとの比較にフォールバックする。
+ *
+ * 戻り値: { diffSec, level, hasData, source }
+ *   diffSec: 基準タイムとの差（秒）。レーティング使用時は擬似的な秒換算値。
  *   level: 'excellent' | 'good' | 'average' | 'below' のいずれか（参考表示用）
+ *   source: 'rating' | 'base_time' のいずれか（どちらの方式で評価したか）
  */
 export function evaluateRaceTime(race) {
-  if (!race || !race.time || !race.track || !race.surface || !race.distance) {
+  if (!race) return { hasData: false, reason: 'データなし' };
+
+  // レーティングが取得できている場合は最優先で使う（重賞のみ）。
+  // レーティング100を基準とし、10ポイント differenceを概ね0.5秒相当として疑似的に扱う。
+  if (race.rating && race.rating > 0) {
+    const ratingDiff = race.rating - 100;
+    const pseudoDiffSec = ratingDiff / 20; // 20ポイント差で約1秒相当の目安
+    let level = 'average';
+    if (ratingDiff >= 8) level = 'excellent';
+    else if (ratingDiff >= 2) level = 'good';
+    else if (ratingDiff <= -8) level = 'below';
+    return {
+      hasData: true,
+      diffSec: Math.round(pseudoDiffSec * 10) / 10,
+      level,
+      source: 'rating',
+      rating: race.rating,
+    };
+  }
+
+  if (!race.time || !race.track || !race.surface || !race.distance) {
     return { hasData: false, reason: 'タイム・競馬場・距離のいずれかが不明' };
   }
 
@@ -134,7 +162,7 @@ export function evaluateRaceTime(race) {
   else if (diffSec >= 0.3) level = 'good';
   else if (diffSec <= -1.0) level = 'below';
 
-  return { hasData: true, diffSec: Math.round(diffSec * 10) / 10, level, tier, baseTime: adjustedBase };
+  return { hasData: true, diffSec: Math.round(diffSec * 10) / 10, level, tier, baseTime: adjustedBase, source: 'base_time' };
 }
 
 /**

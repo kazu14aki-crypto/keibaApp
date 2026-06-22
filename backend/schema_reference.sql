@@ -15,6 +15,7 @@
 -- 現時点で必要なマイグレーション（未実行の場合は実行してください）:
 --   ALTER TABLE horses ADD COLUMN IF NOT EXISTS history JSONB;
 --   ALTER TABLE horses ADD COLUMN IF NOT EXISTS current_weight INTEGER DEFAULT 0;
+--   ALTER TABLE horses ADD COLUMN IF NOT EXISTS current_impost FLOAT DEFAULT 0.0;
 -- ============================================================
 
 create table if not exists races (
@@ -42,6 +43,7 @@ create table if not exists horses (
   last_time varchar default '',
   last_3f varchar default '',
   current_weight integer default 0,
+  current_impost float default 0.0,
   result_rank varchar default '',
   note text default '',
   factors jsonb not null default '{"waku":0,"jockey":0,"pedigree":0,"time":0,"condition":0,"form":0,"season":3}',

@@ -19,7 +19,7 @@ class JraUrlImport(BaseModel):
 
 
 def _empty_factors():
-    return {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3}
+    return {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3, "impost": 5}
 
 
 @router.post("/race/{race_id}")
@@ -185,6 +185,7 @@ def import_from_jra_url(race_id: str, payload: JraUrlImport, db: Session = Depen
             "style": h["style"],
             "last_time": (h.get("history") or {}).get("前走", {}).get("time", "") if (h.get("history") or {}).get("前走") else "",
             "last_3f": (h.get("history") or {}).get("前走", {}).get("last_3f", "") if (h.get("history") or {}).get("前走") else "",
+            "current_impost": h.get("current_impost") or 0.0,
             "note": "",
             "factors": _empty_factors(),
             "history": h.get("history") or {"前走": None, "前々走": None, "3走前": None, "4走前": None},
