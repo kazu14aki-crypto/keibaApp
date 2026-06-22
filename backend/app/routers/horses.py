@@ -19,7 +19,7 @@ class JraUrlImport(BaseModel):
 
 
 def _empty_factors():
-    return {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3, "impost": 5}
+    return {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3, "impost": 5, "sameCourse": 10}
 
 
 @router.post("/race/{race_id}")

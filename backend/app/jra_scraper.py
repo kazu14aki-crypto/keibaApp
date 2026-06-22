@@ -261,7 +261,7 @@ def _parse_one_race_segment(segment: str) -> dict:
         "date": "", "track": "", "class_name": "", "surface": "", "distance": 0,
         "condition": "", "headcount": 0, "rank": 0, "popularity": 0,
         "time": "", "weight": 0, "jockey": "", "corner_positions": "", "last_3f": "",
-        "rating": 0, "impost": 0.0,
+        "rating": 0, "impost": 0.0, "margin": None,
     }
 
     date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", segment)
@@ -358,12 +358,12 @@ def _parse_one_race_segment(segment: str) -> dict:
             result["rating"] = int(rating_match.group(1))
 
     # 通過順表示: 「3 3」のように半角スペース区切り、または「3-3」のようにハイフン区切りの数字列。
-    # 末尾に「3F」が続く直前のパターンを通過順とみなす。
-    corner_match = re.search(r"((?:\d{1,2}[\s-]+)+\d{1,2})\s*3F", segment)
+    # 末尾に「3F」または「3Ｆ」（全角F）が続く直前のパターンを通過順とみなす。
+    corner_match = re.search(r"((?:\d{1,2}[\s-]+)+\d{1,2})\s*3[FＦ]", segment)
     if corner_match:
         result["corner_positions"] = re.sub(r"[\s-]+", "-", corner_match.group(1).strip())
 
-    last3f_match = re.search(r"3F\s*(\d{2}\.\d)", segment)
+    last3f_match = re.search(r"3[FＦ]\s*(\d{2}\.\d)", segment)
     if last3f_match:
         result["last_3f"] = last3f_match.group(1)
 
@@ -379,6 +379,7 @@ def _parse_one_race_segment(segment: str) -> dict:
             jockey_found = True
         result["impost"] = float(weight_kg_match.group(2))
     if not jockey_found:
+
         # 「(57.0)」の直前にある語を逆方向に取得し、もし"kg"を含んでいたら
         # それより後ろの部分だけを候補とする（"500kg 横山琉人"のような連結を分離するため）
         bracket_match = re.search(r"([^(（]{1,20})[（(](\d{2}\.\d)[)）]", segment)
@@ -392,6 +393,14 @@ def _parse_one_race_segment(segment: str) -> dict:
                 result["jockey"] = candidate
             if not result["impost"]:
                 result["impost"] = float(bracket_match.group(2))
+
+    # 着差（1着との時間差）: 末尾の「勝ち馬名(0.3)」のような形式から抽出。
+    # 1着の場合は0.0。数値が小さいほど惜敗（評価を下げすぎない）。
+    margin_match = re.search(r"\((\d+\.\d+)\)\s*$", segment.strip())
+    if margin_match:
+        result["margin"] = float(margin_match.group(1))
+    elif result["rank"] == 1:
+        result["margin"] = 0.0
 
     return result
 

@@ -70,10 +70,11 @@ export default function RaceDetailPage() {
         waku: wakuScore,
         time: historyResults.time.hasData ? historyResults.time.score : h.factors.time,
         jockey: historyResults.jockey.score,
-        condition: historyResults.condition.score,
+        condition: historyResults.condition.hasData ? historyResults.condition.score : h.factors.condition,
         form: historyResults.form.score,
         pedigree: historyResults.pedigree.score,
         impost: historyResults.impost.hasData ? historyResults.impost.score : h.factors.impost,
+        sameCourse: historyResults.sameCourse.hasData ? historyResults.sameCourse.score : h.factors.sameCourse,
       };
       return {
         id: h.id,
@@ -222,7 +223,7 @@ export default function RaceDetailPage() {
 
       {ranked.length > 0 && (
         <div style={styles.legendNote}>
-          採点は{MAX_TOTAL}点満点（枠順・騎手・血統・タイム指数 各20点、馬場適性・臨戦状態 各10点、季節・気温適性 5点）。
+          採点は{MAX_TOTAL}点満点（枠順・騎手・血統・タイム指数・同コース実績 各20点、馬場適性・臨戦状態 各10点、斤量10点、季節・気温適性 5点）。
         </div>
       )}
 

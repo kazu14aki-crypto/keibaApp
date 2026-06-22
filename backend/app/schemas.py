@@ -41,6 +41,7 @@ class HorseFactors(BaseModel):
     form: int = 0
     season: int = 3
     impost: int = 5
+    sameCourse: int = 10
 
 
 class HorseCreate(BaseModel):
