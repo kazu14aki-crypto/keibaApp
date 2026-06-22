@@ -408,11 +408,23 @@ def _parse_history(history_cell) -> dict:
 
 
 def infer_style_from_history(history: dict, fallback: str = "") -> str:
-    """過去走の通過順から脚質を推定する（JRA公式マークが取れない場合のフォールバック）。"""
+    """過去走の通過順から脚質を推定する（JRA公式マークが取れない場合のフォールバック）。
+
+    最終コーナー（4コーナー相当）通過順の頭数比で判定する。
+    1コーナーではなく最終コーナーを使う理由:
+    - 道中のポジション変動が大きい馬でも、最終コーナーの位置が実質的な脚質を反映しやすい
+    - JRAの脚質マーク（逃/先/差/追）も最終コーナー付近の位置を基準にしている
+
+    判定閾値（頭数比）:
+    - 逃げ : ratio ≤ 0.08 (16頭なら約1.3番手以内)
+    - 先行 : ratio ≤ 0.30 (16頭なら約4.8番手以内)
+    - 差し : ratio ≤ 0.65 (16頭なら約10.4番手以内)
+    - 追込 : ratio > 0.65
+    """
     if fallback:
         return fallback
 
-    positions = []
+    final_positions = []
     headcounts = []
     for label in ["前走", "前々走", "3走前", "4走前"]:
         race = history.get(label)
@@ -421,22 +433,22 @@ def infer_style_from_history(history: dict, fallback: str = "") -> str:
         nums = [int(x) for x in race["corner_positions"].split("-") if x.isdigit()]
         if not nums:
             continue
-        positions.append(nums[0])
+        final_positions.append(nums[-1])   # 最終コーナー通過順
         if race.get("headcount"):
             headcounts.append(race["headcount"])
 
-    if not positions:
+    if not final_positions:
         return "先行"
 
-    avg_pos = sum(positions) / len(positions)
+    avg_pos = sum(final_positions) / len(final_positions)
     avg_headcount = sum(headcounts) / len(headcounts) if headcounts else 14
     ratio = avg_pos / avg_headcount if avg_headcount else 0.5
 
-    if ratio <= 0.15:
+    if ratio <= 0.08:
         return "逃げ"
-    elif ratio <= 0.4:
+    elif ratio <= 0.30:
         return "先行"
-    elif ratio <= 0.7:
+    elif ratio <= 0.65:
         return "差し"
     else:
         return "追込"

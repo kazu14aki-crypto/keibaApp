@@ -131,31 +131,57 @@ export function calcFormScore(history, raceDate) {
     }
   }
 
-  // 着順推移（直近2走が分かれば比較）
-  let trendScore = 5;
+  // 着順の絶対評価（グレード重み付き）。
+  // 前走単体の絶対的な強さを「G1で1着 > G2で1着 > G3で1着 > OP > 3勝 > ...」として評価する。
+  // class_nameからグレード係数を算出し、着順スコアに掛ける。
+  function gradeWeight(className) {
+    if (!className) return 1.0;
+    if (/G[Ⅰ1](?!I)/.test(className) || /GI$/.test(className)) return 2.0;  // G1
+    if (/G[Ⅱ2]/.test(className) || /GII$/.test(className)) return 1.6;       // G2
+    if (/G[Ⅲ3]/.test(className) || /GIII$/.test(className)) return 1.3;      // G3
+    if (/リステッド/.test(className)) return 1.15;
+    if (/オープン|OP|ステークス/.test(className) || /[SC]$/.test(className.trim())) return 1.1;
+    return 1.0;
+  }
+
+  let absoluteScore = 5;
+  let absoluteReason = "";
+  if (races.length > 0 && races[0].rank > 0 && races[0].headcount > 0) {
+    const lastRace = races[0];
+    const rankRatio = lastRace.rank / lastRace.headcount;
+    const gw = gradeWeight(lastRace.class_name);
+    // 頭数比での着順スコア（1着=10→最下位=0）を基本値とし、グレード係数で増幅
+    const baseRankScore = Math.max(0, 10 * (1 - (lastRace.rank - 1) / Math.max(lastRace.headcount - 1, 1)));
+    absoluteScore = Math.min(10, Math.round(baseRankScore * gw * 0.7 + 3));
+    const gradeLabel = gw >= 2.0 ? 'G1' : gw >= 1.6 ? 'G2' : gw >= 1.3 ? 'G3' : gw >= 1.1 ? 'OP' : '';
+    absoluteReason = `前走${gradeLabel ? gradeLabel + ' ' : ''}${lastRace.rank}着/${lastRace.headcount}頭（${Math.round(rankRatio * 100)}%）`;
+  }
+
+  // 着順推移トレンド（前走→前々走の比較）
+  let trendBonus = 0;
   let trendReason = "";
   if (races.length >= 2 && races[0].rank > 0 && races[1].rank > 0) {
     const prevRank = races[0].rank;
     const prevPrevRank = races[1].rank;
     if (prevRank < prevPrevRank) {
-      trendScore = 7;
-      trendReason = "着順が上昇傾向";
+      trendBonus = 1;
+      trendReason = "上昇傾向";
     } else if (prevRank > prevPrevRank) {
-      trendScore = 3;
-      trendReason = "着順が下降傾向";
-    } else {
-      trendScore = 5;
-      trendReason = "着順は横ばい";
+      trendBonus = -1;
+      trendReason = "下降傾向";
     }
   }
 
+  const trendScore = Math.max(0, Math.min(10, absoluteScore + trendBonus));
+  const reasonParts = [absoluteReason, trendReason, intervalReason].filter(Boolean);
+
   const score = Math.round((intervalScore + trendScore) / 2);
-  const reasonParts = [intervalReason, trendReason].filter(Boolean);
+  const reasonStr = reasonParts.join(" / ") || "判断材料が限定的";
 
   return {
     score: Math.max(0, Math.min(10, score)),
     hasData: true,
-    reason: reasonParts.join(" / ") || "判断材料が限定的",
+    reason: reasonStr,
   };
 }
 

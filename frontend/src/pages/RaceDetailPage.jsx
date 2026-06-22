@@ -193,12 +193,16 @@ export default function RaceDetailPage() {
 
       <div style={styles.tableWrap} className="scrollbar">
         <div style={styles.tableHeadRow}>
-          <div style={{ ...styles.th, width: 44 }}>枠</div>
-          <div style={{ ...styles.th, width: 44 }}>番</div>
-          <div style={{ ...styles.th, flex: '1 1 160px', textAlign: 'left' }}>馬名</div>
-          <div style={{ ...styles.th, flex: '1 1 120px', textAlign: 'left' }}>騎手</div>
-          <div style={{ ...styles.th, width: 110 }}>採点</div>
-          <div style={{ ...styles.th, width: 36 }}></div>
+          <div style={{ ...styles.th, width: 28 }}>枠</div>
+          <div style={{ ...styles.th, width: 28 }}>番</div>
+          <div style={{ ...styles.th, flex: '1 1 120px', textAlign: 'left' }}>馬名</div>
+          <div style={{ ...styles.th, flex: '0 0 80px', textAlign: 'left' }}>騎手</div>
+          <div style={{ ...styles.th, flex: '0 0 52px' }}>脚質</div>
+          <div style={{ ...styles.th, flex: '0 0 72px' }}>血統</div>
+          <div style={{ ...styles.th, flex: '0 0 52px' }}>斤量</div>
+          <div style={{ ...styles.th, flex: '0 0 64px' }}>タイム</div>
+          <div style={{ ...styles.th, width: 80 }}>採点</div>
+          <div style={{ ...styles.th, width: 28 }}></div>
         </div>
 
         {ranked.map(h => (
@@ -285,44 +289,58 @@ function RaceHeader({ race, editing, setEditing, onUpdate }) {
 function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
   const score = totalScore(horse.factors);
   const pct = score / MAX_TOTAL;
+  // タイム評価（前走）
+  const prevRace = horse.history?.['前走'];
+  const timeEval = prevRace ? evaluateRaceTime(prevRace) : null;
+  const timeLevelShort = { excellent: '◎', good: '○', average: '△', below: '▽' }[timeEval?.level] || '—';
+  const styleColor = { 逃げ: '#b3493f', 先行: '#3d5a7a', 差し: '#3f7a52', 追込: '#7a4a9c' }[horse.style] || '#8a8374';
+
   return (
     <div style={styles.horseBlock}>
       <div style={styles.horseRow} onClick={onToggle}>
-        <div style={{ ...styles.td, width: 44 }}><span style={{ ...styles.wakuChip, ...wakuColor(horse.waku) }}>{horse.waku}</span></div>
-        <div style={{ ...styles.td, width: 44, fontFamily: 'JetBrains Mono, monospace', color: '#9c9588' }}>{horse.num}</div>
-        <div style={{ ...styles.td, flex: '1 1 160px', textAlign: 'left', fontWeight: 700 }}>
+        <div style={{ ...styles.td, width: 28 }}><span style={{ ...styles.wakuChip, ...wakuColor(horse.waku) }}>{horse.waku}</span></div>
+        <div style={{ ...styles.td, width: 28, fontFamily: 'monospace', color: '#9c9588', fontSize: 12 }}>{horse.num}</div>
+        <div style={{ ...styles.td, flex: '1 1 120px', textAlign: 'left', fontWeight: 700, fontSize: 13 }}>
           {horse.name || <span style={{ color: '#6b655a' }}>未入力</span>}
+          {horse.pedigree && <div style={{ fontSize: 10, color: '#9c9588', fontWeight: 400 }}>{horse.pedigree}</div>}
         </div>
-        <div style={{ ...styles.td, flex: '1 1 120px', textAlign: 'left', color: '#b9b2a3' }}>{horse.jockey || '—'}</div>
-        <div style={{ ...styles.td, width: 110 }}>
+        <div style={{ ...styles.td, flex: '0 0 80px', textAlign: 'left', color: '#b9b2a3', fontSize: 12 }}>{horse.jockey || '—'}</div>
+        <div style={{ ...styles.td, flex: '0 0 52px', fontSize: 11, color: styleColor, fontWeight: 600 }}>{horse.style || '—'}</div>
+        <div style={{ ...styles.td, flex: '0 0 72px', fontSize: 11, color: '#9c9588' }}>{horse.pedigree ? horse.pedigree.replace('系', '') : '—'}</div>
+        <div style={{ ...styles.td, flex: '0 0 52px', fontSize: 11, color: '#9c9588' }}>{horse.current_impost ? `${horse.current_impost}kg` : '—'}</div>
+        <div style={{ ...styles.td, flex: '0 0 64px', fontSize: 12, fontWeight: 600, color: timeEval?.level === 'excellent' ? '#a87f2e' : timeEval?.level === 'below' ? '#b3493f' : '#5a5348' }}
+          title={timeEval?.hasData ? (timeEval.source === 'rating' ? `レーティング${timeEval.rating}` : `基準比${timeEval.diffSec > 0 ? '+' : ''}${timeEval.diffSec}秒`) : ''}>
+          {timeEval?.hasData ? timeLevelShort : '—'}
+        </div>
+        <div style={{ ...styles.td, width: 80 }}>
           <div style={styles.scoreWrap}>
-            <span style={styles.scoreNum}>{score}</span>
+            <span style={{ ...styles.scoreNum, fontSize: 16 }}>{score}</span>
             <div style={styles.scoreBarTrack}><div style={{ ...styles.scoreBarFill, width: `${pct * 100}%` }} /></div>
           </div>
         </div>
-        <div style={{ ...styles.td, width: 36 }}>
+        <div style={{ ...styles.td, width: 28 }}>
           <span style={{ transform: expanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform .2s', color: '#8a8374' }}>›</span>
         </div>
       </div>
 
       {expanded && (
         <div style={styles.horseDetail}>
-          <div style={styles.detailGrid}>
-            <Field label="馬名"><input style={styles.input} value={horse.name} onChange={e => onUpdate({ name: e.target.value })} /></Field>
-            <Field label="騎手"><input style={styles.input} value={horse.jockey} onChange={e => onUpdate({ jockey: e.target.value })} /></Field>
-            <Field label="馬番"><input style={styles.input} type="number" value={horse.num} onChange={e => onUpdate({ num: Number(e.target.value) })} /></Field>
-            <Field label="枠番"><input style={styles.input} type="number" min={1} max={8} value={horse.waku} onChange={e => onUpdate({ waku: Number(e.target.value) })} /></Field>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            <Field label="馬名"><input style={{ ...styles.input, fontSize: 12 }} value={horse.name} onChange={e => onUpdate({ name: e.target.value })} /></Field>
+            <Field label="騎手"><input style={{ ...styles.input, fontSize: 12 }} value={horse.jockey} onChange={e => onUpdate({ jockey: e.target.value })} /></Field>
+            <Field label="馬番"><input style={{ ...styles.input, fontSize: 12, width: 50 }} type="number" value={horse.num} onChange={e => onUpdate({ num: Number(e.target.value) })} /></Field>
+            <Field label="枠番"><input style={{ ...styles.input, fontSize: 12, width: 50 }} type="number" min={1} max={8} value={horse.waku} onChange={e => onUpdate({ waku: Number(e.target.value) })} /></Field>
             <Field label="脚質">
-              <select style={styles.input} value={horse.style} onChange={e => onUpdate({ style: e.target.value })}>
+              <select style={{ ...styles.input, fontSize: 12 }} value={horse.style} onChange={e => onUpdate({ style: e.target.value })}>
                 {STYLES.map(s => <option key={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="血統（父系統など）"><input style={styles.input} value={horse.pedigree} onChange={e => onUpdate({ pedigree: e.target.value })} placeholder="例：ディープインパクト系" /></Field>
-            <Field label="今回の馬体重">
-              <input style={styles.input} type="number" value={horse.current_weight || ''} onChange={e => onUpdate({ current_weight: Number(e.target.value) || 0 })} placeholder="例：462" />
+            <Field label="血統"><input style={{ ...styles.input, fontSize: 12 }} value={horse.pedigree} onChange={e => onUpdate({ pedigree: e.target.value })} placeholder="例：ディープ系" /></Field>
+            <Field label="馬体重">
+              <input style={{ ...styles.input, fontSize: 12, width: 70 }} type="number" value={horse.current_weight || ''} onChange={e => onUpdate({ current_weight: Number(e.target.value) || 0 })} placeholder="462" />
               <WeightDiffHint horse={horse} />
             </Field>
-            <Field label="結果着順（後日記録用）"><input style={styles.input} value={horse.result_rank || ''} onChange={e => onUpdate({ result_rank: e.target.value })} placeholder="例：1" /></Field>
+            <Field label="着順記録"><input style={{ ...styles.input, fontSize: 12, width: 50 }} value={horse.result_rank || ''} onChange={e => onUpdate({ result_rank: e.target.value })} placeholder="1" /></Field>
           </div>
 
           <div style={styles.factorSection}>
@@ -335,7 +353,7 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
           {horse.history && <PastRacesTable history={horse.history} />}
 
           <Field label="メモ" span={2}>
-            <textarea style={{ ...styles.input, minHeight: 50, resize: 'vertical' }} value={horse.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="調教評価・不利情報・市場の歪みなど自由記述（例：#夏弱 #冬強 などのタグを書くと馬名検索で横断検索できます）" />
+            <textarea style={{ ...styles.input, minHeight: 44, resize: 'vertical', fontSize: 12 }} value={horse.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="調教評価・不利情報・市場の歪みなど（#夏弱 #冬強 などタグで横断検索できます）" />
           </Field>
 
           <button style={styles.deleteTextBtn} onClick={onDelete}>この馬を削除</button>
