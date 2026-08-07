@@ -65,7 +65,7 @@ class Horse(Base):
     name: Mapped[str] = mapped_column(String, nullable=True, default="")
     jockey: Mapped[str] = mapped_column(String, nullable=True, default="")
     pedigree: Mapped[str] = mapped_column(String, nullable=True, default="")
-    style: Mapped[str] = mapped_column(String, nullable=True, default="先行")
+    style: Mapped[str] = mapped_column(String, nullable=True, default="未判定")
     last_time: Mapped[str] = mapped_column(String, nullable=True, default="")
     last_3f: Mapped[str] = mapped_column(String, nullable=True, default="")
     current_weight: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
@@ -126,6 +126,7 @@ def init_db():
     if engine.dialect.name == "postgresql":
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE horses ADD COLUMN IF NOT EXISTS odds_captured_at TIMESTAMP"))
+            conn.execute(text("ALTER TABLE horses ALTER COLUMN style SET DEFAULT '未判定'"))
 
 
 def get_db():

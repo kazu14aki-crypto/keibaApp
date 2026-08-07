@@ -40,7 +40,7 @@ create table if not exists horses (
   name varchar default '',
   jockey varchar default '',
   pedigree varchar default '',
-  style varchar default '先行',
+  style varchar default '未判定',
   last_time varchar default '',
   last_3f varchar default '',
   current_weight integer default 0,

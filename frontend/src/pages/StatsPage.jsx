@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 import { totalScore, FACTOR_DEFS, MAX_TOTAL } from '../lib/scoring';
 import { styles } from '../styles';
+import RaceLoading from '../components/RaceLoading';
 
 export default function StatsPage() {
   const [races, setRaces] = useState(null);
@@ -43,7 +44,7 @@ export default function StatsPage() {
     return avg;
   }, [scored]);
 
-  if (races === null) return <div style={styles.dim}>読み込み中…</div>;
+  if (races === null) return <RaceLoading label="傾向データを集計中…" />;
 
   if (races.length === 0) {
     return (

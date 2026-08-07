@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { totalScore, TRACKS, SURFACES, CONDITIONS, isUpcomingWeekend } from '../lib/scoring';
 import { styles } from '../styles';
+import RaceLoading from '../components/RaceLoading';
 
 export default function RaceListPage() {
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ export default function RaceListPage() {
   }, [races]);
 
   if (races === null) {
-    return <div style={styles.dim}>読み込み中…</div>;
+    return <RaceLoading label="出馬表を読み込み中…" />;
   }
 
   return (

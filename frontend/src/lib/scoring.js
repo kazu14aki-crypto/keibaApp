@@ -1,7 +1,7 @@
 export const TRACKS = ['東京', '中山', '阪神', '京都', '中京', '新潟', '小倉', '福島', '札幌', '函館'];
 export const SURFACES = ['芝', 'ダート'];
 export const CONDITIONS = ['良', '稍重', '重', '不良'];
-export const STYLES = ['逃げ', '先行', '差し', '追込'];
+export const STYLES = ['未判定', '逃げ', '先行', '差し', '追込'];
 
 export const FACTOR_DEFS = [
   {

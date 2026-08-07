@@ -8,11 +8,11 @@ from pydantic import BaseModel
 
 from app.db import get_db, Horse, Race
 from app.schemas import HorseCreate, HorseUpdate
-from app.jra_scraper import fetch_and_parse, JraFetchError
+from app.jra_scraper import fetch_and_parse, infer_style_from_history, JraFetchError
 
 router = APIRouter(prefix="/horses", tags=["horses"])
 
-STYLES = ["逃げ", "先行", "差し", "追込"]
+STYLES = ["未判定", "逃げ", "先行", "差し", "追込"]
 
 
 class JraUrlImport(BaseModel):
@@ -118,7 +118,7 @@ def _parse_csv_text(text: str):
                 waku = int(cols[idx["waku"]])
             except ValueError:
                 pass
-        style = "先行"
+        style = "未判定"
         if idx["style"] >= 0 and idx["style"] < len(cols) and cols[idx["style"]] in STYLES:
             style = cols[idx["style"]]
 
@@ -161,6 +161,25 @@ async def import_csv(race_id: str, file: UploadFile = File(...), db: Session = D
     for h in new_horses:
         db.refresh(h)
     return {"imported": len(new_horses), "horses": [h.to_dict() for h in new_horses]}
+
+
+@router.post("/race/{race_id}/infer-styles")
+def infer_race_styles(race_id: str, db: Session = Depends(get_db)):
+    """保存済みのJRA過去走から脚質を再推定する。"""
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="レースが見つかりません。")
+    updated = unresolved = 0
+    for horse in race.horses:
+        style = infer_style_from_history(horse.history or {})
+        if style == "未判定":
+            unresolved += 1
+        if horse.style != style:
+            horse.style = style
+            updated += 1
+    db.commit()
+    return {"updated": updated, "unresolved": unresolved,
+            "horses": [h.to_dict() for h in race.horses]}
 
 
 @router.post("/race/{race_id}/import-jra-url")

@@ -16,9 +16,12 @@ export default function ModelPage() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [evThreshold, setEvThreshold] = useState(1.2);
+  const [maxOdds, setMaxOdds] = useState(30);
   const [bankroll, setBankroll] = useState(100000);
 
   const trained = Array.isArray(MODEL.coef);
+  const marketBeating = trained && MODEL.test_logloss_model && MODEL.test_logloss_market
+    ? MODEL.test_logloss_model < MODEL.test_logloss_market : false;
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -50,10 +53,11 @@ export default function ModelPage() {
       const preds = predictRace(withOdds);
       const rows = withOdds.map((h, i) => ({ ...h, ...preds[i] }))
         .sort((a, b) => b.ev - a.ev);
-      const picks = rows.filter(r => r.ev >= evThreshold);
+      const picks = marketBeating
+        ? rows.filter(r => r.ev >= evThreshold && (!maxOdds || r.odds <= maxOdds)) : [];
       return { ...race, results: rows, picks };
     });
-  }, [races, evThreshold, trained]);
+  }, [races, evThreshold, maxOdds, trained, marketBeating]);
 
   const totalPicks = analyzed.reduce((n, r) => n + (r.picks?.length || 0), 0);
   const pct = v => `${(v * 100).toFixed(1)}%`;
@@ -84,6 +88,14 @@ export default function ModelPage() {
             train_model.py で学習してください。生成された model_weights.json を
             frontend/src/lib/model_weights.json に上書きしてデプロイすると、このページが有効になります。
           </div>
+        </div>
+      )}
+
+      {trained && !marketBeating && (
+        <div style={{ ...styles.card, borderColor: '#b3493f', marginBottom: 16, fontSize: 12, lineHeight: 1.8 }}>
+          <b>検証未通過：購入候補を停止しています。</b><br />
+          現在のモデルはテスト期間のlogLossで市場を上回っていません。予測値は比較用として表示しますが、
+          再学習とウォークフォワード検証で市場超過を確認するまで買い目としては扱いません。
         </div>
       )}
 
@@ -120,8 +132,15 @@ export default function ModelPage() {
                 style={{ ...styles.input, width: 100, fontSize: 12, padding: '3px 6px' }}
                 value={bankroll} onChange={e => setBankroll(Number(e.target.value) || 0)} />
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              オッズ上限
+              <input type="number" step="5" min="0"
+                style={{ ...styles.input, width: 64, fontSize: 12, padding: '3px 6px' }}
+                value={maxOdds} onChange={e => setMaxOdds(Number(e.target.value) || 0)} />
+              <span style={{ color: '#9c9588' }}>倍（0=無制限）</span>
+            </label>
             <span style={{ color: '#a87f2e', fontWeight: 700 }}>
-              購入候補: 全{analyzed.length}レース中 {totalPicks}頭
+              {marketBeating ? `購入候補: 全${analyzed.length}レース中 ${totalPicks}頭` : '購入候補: 検証未通過のため停止'}
             </span>
           </div>
 
@@ -129,7 +148,7 @@ export default function ModelPage() {
             <div key={race.key} style={{ ...styles.card, marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
                 {race.date} {race.track} {race.raceNo}R
-                {race.picks?.length > 0 && <span style={{ color: '#a87f2e' }}>　🔥 {race.picks.length}頭妙味</span>}
+                {marketBeating && race.picks?.length > 0 && <span style={{ color: '#a87f2e' }}>　🔥 {race.picks.length}頭妙味</span>}
               </div>
               {!race.results ? (
                 <div style={{ fontSize: 11, color: '#9c9588' }}>オッズ入り6頭以上のデータがなくスキップ</div>
@@ -150,22 +169,22 @@ export default function ModelPage() {
                     {race.results.map(h => (
                       <tr key={h.num} style={{
                         textAlign: 'right',
-                        background: h.ev >= evThreshold ? 'rgba(168,127,46,0.12)' : 'transparent',
+                        background: marketBeating && h.ev >= evThreshold && (!maxOdds || h.odds <= maxOdds) ? 'rgba(168,127,46,0.12)' : 'transparent',
                         borderTop: '1px solid rgba(138,131,116,0.15)',
                       }}>
                         <td style={{ padding: '4px 8px', textAlign: 'center', fontFamily: 'monospace' }}>{h.num}</td>
-                        <td style={{ padding: '4px 8px', textAlign: 'left', fontWeight: h.ev >= evThreshold ? 700 : 400 }}>
-                          {h.ev >= evThreshold ? '🔥 ' : ''}{h.name}
+                        <td style={{ padding: '4px 8px', textAlign: 'left', fontWeight: marketBeating && h.ev >= evThreshold && (!maxOdds || h.odds <= maxOdds) ? 700 : 400 }}>
+                          {marketBeating && h.ev >= evThreshold && (!maxOdds || h.odds <= maxOdds) ? '🔥 ' : ''}{h.name}
                         </td>
                         <td style={{ padding: '4px 8px' }}>{h.odds.toFixed(1)}</td>
                         <td style={{ padding: '4px 8px', color: '#9c9588' }}>{pct(h.marketProb)}</td>
                         <td style={{ padding: '4px 8px', fontWeight: 600 }}>{pct(h.prob)}</td>
                         <td style={{
                           padding: '4px 8px', fontWeight: 700,
-                          color: h.ev >= evThreshold ? '#a87f2e' : h.ev >= 1 ? '#5a5348' : '#b3493f',
+                          color: marketBeating && h.ev >= evThreshold && (!maxOdds || h.odds <= maxOdds) ? '#a87f2e' : h.ev >= 1 ? '#5a5348' : '#b3493f',
                         }}>{h.ev.toFixed(2)}</td>
                         <td style={{ padding: '4px 8px' }}>
-                          {h.kelly > 0 ? `${Math.round(h.kelly * bankroll / 100) * 100}円` : '—'}
+                          {marketBeating && h.ev >= evThreshold && (!maxOdds || h.odds <= maxOdds) && h.kelly > 0 ? `${Math.round(h.kelly * bankroll / 100) * 100}円` : '—'}
                         </td>
                       </tr>
                     ))}

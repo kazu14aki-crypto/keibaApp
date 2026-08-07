@@ -23,7 +23,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 ALLOWED_HOSTS = {"www.jra.go.jp", "sp.jra.jp", "jra.jp"}
 
-STYLES = ["逃げ", "先行", "差し", "追込"]
+STYLES = ["未判定", "逃げ", "先行", "差し", "追込"]
 
 # JRA公式の脚質マーク(1文字)と、アプリ内の脚質表記の対応
 JRA_STYLE_MARK_MAP = {
@@ -445,7 +445,8 @@ def infer_style_from_history(history: dict, fallback: str = "") -> str:
             headcounts.append(race["headcount"])
 
     if not final_positions:
-        return "先行"
+        # 根拠のない「先行」は展開予測を歪めるため、データ不足を明示する。
+        return "未判定"
 
     avg_pos = sum(final_positions) / len(final_positions)
     avg_headcount = sum(headcounts) / len(headcounts) if headcounts else 14

@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
-import { styles } from './styles';
+import RaceLoading from './components/RaceLoading';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RaceListPage from './pages/RaceListPage';
@@ -13,12 +13,7 @@ import ModelPage from './pages/ModelPage';
 function RequireAuth({ children }) {
   const { authed, checking } = useAuth();
   if (checking) {
-    return (
-      <div style={styles.loadingWrap}>
-        <div style={styles.loadingMark}>馬</div>
-        <div style={styles.loadingText}>確認中…</div>
-      </div>
-    );
+    return <RaceLoading label="ログイン状態を確認中…" />;
   }
   if (!authed) return <Navigate to="/login" replace />;
   return children;

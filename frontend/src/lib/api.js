@@ -65,6 +65,7 @@ export const api = {
   },
   importJraUrl: (raceId, url) =>
     request(`/horses/race/${raceId}/import-jra-url`, { method: 'POST', body: JSON.stringify({ url }) }),
+  inferStyles: (raceId) => request(`/horses/race/${raceId}/infer-styles`, { method: 'POST' }),
 };
 
 export { ApiError };

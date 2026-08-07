@@ -6,6 +6,7 @@ import { calcWakuScore, getCourseRule } from '../lib/courseData';
 import { calcAutoFactorsFromHistory } from '../lib/historyScore';
 import { evaluateRaceTime } from '../lib/timeIndex';
 import ValueAnalysis from '../components/ValueAnalysis';
+import RaceLoading from '../components/RaceLoading';
 import { styles } from '../styles';
 
 export default function RaceDetailPage() {
@@ -42,7 +43,7 @@ export default function RaceDetailPage() {
     const horse = await api.addHorse(raceId, {
       num: nextNum,
       waku: Math.min(8, Math.ceil(nextNum / 2)),
-      name: '', jockey: '', pedigree: '', style: '先行',
+      name: '', jockey: '', pedigree: '', style: '未判定',
       last_time: '', last_3f: '', note: '',
       factors: { waku: 0, jockey: 0, pedigree: 0, time: 0, condition: 0, form: 0 },
     });
@@ -107,6 +108,16 @@ export default function RaceDetailPage() {
       showToast(`枠順・タイム・騎手・馬場・臨戦状態を自動計算しました（${notes.join('、')}は手動評価を推奨）`);
     } else {
       showToast('枠順・タイム・騎手・馬場・臨戦状態を自動計算しました');
+    }
+  };
+
+  const inferStyles = async () => {
+    try {
+      const result = await api.inferStyles(raceId);
+      setRace(r => ({ ...r, horses: result.horses }));
+      showToast(`脚質を再判定しました（更新${result.updated}頭・未判定${result.unresolved}頭）`);
+    } catch (err) {
+      showToast(err.message || '脚質の再判定に失敗しました');
     }
   };
 
@@ -221,7 +232,7 @@ export default function RaceDetailPage() {
     return [...race.horses].map(h => ({ ...h, score: totalScore(h.factors) })).sort((a, b) => b.score - a.score);
   }, [race]);
 
-  if (!race) return <div style={styles.dim}>読み込み中…</div>;
+  if (!race) return <RaceLoading label="レース情報を読み込み中…" />;
 
   return (
     <div>
@@ -238,13 +249,14 @@ export default function RaceDetailPage() {
         <button style={styles.ghostBtn} onClick={() => packInputRef.current?.click()}>🧠 解析パック取込</button>
         <input ref={packInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={handlePackImport} />
         <button style={styles.primaryBtn} onClick={autoCalculate}>⚡ 採点基準を自動計算（全項目）</button>
+        <button style={styles.ghostBtn} onClick={inferStyles}>🏇 脚質を過去走から再判定</button>
         {ranked.length > 0 && <button style={styles.ghostBtn} onClick={() => valueAnalysisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>💰 オッズ・妙味分析へ</button>}
       </div>
 
       <div style={styles.toolbarHint}>
         {(() => {
           const rule = getCourseRule(race.track, race.surface, race.distance);
-          return `このコースの傾向：${rule.note}`;
+          return `このコースの傾向：${rule.note}　脚質はJRAの表記または過去走の通過順から推定し、根拠不足なら「未判定」と表示します。`;
         })()}
       </div>
 
@@ -392,7 +404,7 @@ function HorseRow({ horse, expanded, onToggle, onUpdate, onFactor, onDelete }) {
           {horse.pedigree && <div style={{ fontSize: 10, color: '#9c9588', fontWeight: 400 }}>{horse.pedigree}</div>}
         </div>
         <div style={{ ...styles.td, flex: '0 0 80px', textAlign: 'left', color: '#b9b2a3', fontSize: 12 }}>{horse.jockey || '—'}</div>
-        <div style={{ ...styles.td, flex: '0 0 52px', fontSize: 11, color: styleColor, fontWeight: 600 }}>{horse.style || '—'}</div>
+        <div style={{ ...styles.td, flex: '0 0 52px', fontSize: 11, color: styleColor, fontWeight: 600 }} title={horse.style === '未判定' ? '過去走の通過順が不足しているため推定していません' : 'JRA表記または過去走の通過順から推定'}>{horse.style || '未判定'}</div>
         <div style={{ ...styles.td, flex: '0 0 72px', fontSize: 11, color: '#9c9588' }}>{horse.pedigree ? horse.pedigree.replace('系', '') : '—'}</div>
         <div style={{ ...styles.td, flex: '0 0 52px', fontSize: 11, color: '#9c9588' }}>{horse.current_impost ? `${horse.current_impost}kg` : '—'}</div>
         <div style={{ ...styles.td, flex: '0 0 64px', fontSize: 12, fontWeight: 600, color: timeEval?.level === 'excellent' ? '#a87f2e' : timeEval?.level === 'below' ? '#b3493f' : '#5a5348' }}

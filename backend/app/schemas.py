@@ -51,7 +51,7 @@ class HorseCreate(BaseModel):
     name: str = ""
     jockey: str = ""
     pedigree: str = ""
-    style: str = "先行"
+    style: str = "未判定"
     last_time: Optional[str] = ""
     last_3f: Optional[str] = ""
     current_weight: Optional[int] = 0
