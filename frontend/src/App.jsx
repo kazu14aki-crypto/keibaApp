@@ -13,7 +13,7 @@ import ModelPage from './pages/ModelPage';
 function RequireAuth({ children }) {
   const { authed, checking } = useAuth();
   if (checking) {
-    return <RaceLoading label="ログイン状態を確認中…" />;
+    return <RaceLoading fullPage label="ログイン状態を確認中" detail="保存済みのログイン情報を安全に確認しています" />;
   }
   if (!authed) return <Navigate to="/login" replace />;
   return children;

@@ -56,7 +56,7 @@ export default function RaceListPage() {
   }, [races]);
 
   if (races === null) {
-    return <RaceLoading label="出馬表を読み込み中…" />;
+    return <RaceLoading label="出馬表を取得中" detail="登録済みレースを整理しています" />;
   }
 
   return (

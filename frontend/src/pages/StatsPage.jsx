@@ -44,7 +44,7 @@ export default function StatsPage() {
     return avg;
   }, [scored]);
 
-  if (races === null) return <RaceLoading label="傾向データを集計中…" />;
+  if (races === null) return <RaceLoading label="傾向データを集計中" detail="登録済みの結果から集計しています" />;
 
   if (races.length === 0) {
     return (

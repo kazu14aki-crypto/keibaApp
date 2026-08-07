@@ -232,7 +232,7 @@ export default function RaceDetailPage() {
     return [...race.horses].map(h => ({ ...h, score: totalScore(h.factors) })).sort((a, b) => b.score - a.score);
   }, [race]);
 
-  if (!race) return <RaceLoading label="レース情報を読み込み中…" />;
+  if (!race) return <RaceLoading label="レース情報を取得中" detail="出走馬・採点・過去走を読み込んでいます" />;
 
   return (
     <div>
