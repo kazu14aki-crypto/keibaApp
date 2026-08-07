@@ -113,6 +113,12 @@ FEATURE_NAMES = [
     "wk_best1",        # ベストラスト1F偏差。速いほど+ (実測で唯一弱い正の効き)
     "wk_n28",          # 乗り込み量
     "wk_self",         # 自己平常比。平常より速い=+ (調子の上向き)
+    # 脚質は過去走の1〜2角通過順から推定。市場が同じ能力でも展開適性を
+    # 十分に織り込めない条件を識別するための、相互排他的な4カテゴリ。
+    "style_nige",      # 逃げ
+    "style_senko",     # 先行
+    "style_sashi",     # 差し
+    "style_oikomi",    # 追込
 ]
 
 # 1レースあたりの最低頭数。TARGETで「上位N頭のみ」出力した場合、この値を
@@ -309,6 +315,15 @@ def featurize_horse(h, market_p, stats):
         ws = h.get("wk_self")
         if ws not in (None, ""):
             f[45] = clip(-float(ws) / 3.0, -2.0, 2.0)
+    style = h.get("style_est", "")
+    if style == "逃げ":
+        f[46] = 1.0
+    elif style == "先行":
+        f[47] = 1.0
+    elif style == "差し":
+        f[48] = 1.0
+    elif style == "追込":
+        f[49] = 1.0
     return f
 
 
@@ -367,6 +382,7 @@ def load_canonical(path):
                 "prev_pci": num("prev_pci"),
                 "class_change": num("class_change"),
                 "dist_fit": num("dist_fit"),
+                "style_est": row.get("style_est", ""),
                 "season_fit": num("season_fit"),
                 "wk_has": num("wk_has", int),
                 "wk_best4": num("wk_best4"),
@@ -803,6 +819,8 @@ def main():
     ap.add_argument("--max-odds", type=float, default=30.0,
                     help="オッズ上限付きEVシミュレーションの上限値(既定30)。0で非表示")
     ap.add_argument("--iters", type=int, default=400, help="最適化の最大反復回数")
+    ap.add_argument("--out", default="model_weights.json",
+                    help="学習済み重みJSONの出力先。候補検証時は既存重みを上書きしないパスを指定")
     args = ap.parse_args()
 
     races = load_canonical(args.csv_path)
@@ -985,9 +1003,9 @@ def main():
         "half_life": args.half_life,
         "l2": args.l2,
     }
-    with open("model_weights.json", "w", encoding="utf-8") as f:
+    with open(args.out, "w", encoding="utf-8") as f:
         json.dump(weights, f, ensure_ascii=False, indent=1)
-    print(f"\n重みを保存: model_weights.json")
+    print(f"\n重みを保存: {args.out}")
     print("サイト組込み: frontend/src/lib/model_weights.json に上書きコピー → デプロイ")
     print("注意: 確定オッズ学習のため実運用の回収率はシミュレーション値-5〜10%を想定。")
     print("      実運用判定がFAILの間はデプロイしないこと。")

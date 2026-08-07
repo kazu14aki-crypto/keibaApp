@@ -48,7 +48,7 @@ function shrunkDiff(statsEntry, prior, g) {
  * @param {number} marketP レース内で正規化した市場勝率
  */
 export function featurizeHorse(h, marketP) {
-  const f = new Array(46).fill(0);
+  const f = new Array(MODEL.coef?.length || 46).fill(0);
   f[0] = Math.log(Math.max(marketP, 1e-6));
   f[1] = ((h.impost || 56) - 56) / 2.0;
   f[2] = (h.weightChange !== null && h.weightChange !== undefined)
@@ -201,6 +201,13 @@ export function featurizeHorse(h, marketP) {
       f[45] = clip(-Number(h.wkSelf) / 3.0, -2.0, 2.0);
     }
   }
+  // 過去走から推定済みの脚質。TARGETの当日CSVに無い場合は0=中立。
+  if (f.length >= 50) {
+    if (h.styleEst === '逃げ') f[46] = 1;
+    else if (h.styleEst === '先行') f[47] = 1;
+    else if (h.styleEst === '差し') f[48] = 1;
+    else if (h.styleEst === '追込') f[49] = 1;
+  }
   return f;
 }
 
@@ -250,6 +257,7 @@ const ALIASES = [
   ['prevLast3f',    ['前走上がり3F', '前走上がり']],
   ['prevCorner4',   ['前走通過順4', '前走4角']],
   ['prevTimeDev',   ['前走時計偏差']],
+  ['styleEst',      ['脚質推定', 'style_est']],
   ['sex',           ['性別']],
   ['raceId',        ['レースID', 'RaceID', 'race_id']],
   ['date',          ['日付', '年月日', '開催日']],
@@ -425,6 +433,7 @@ export function normalizeTargetRows(rows) {
       prevLast3f: toNum(get(raw, 'prevLast3f')),
       prevCorner4: toNum(get(raw, 'prevCorner4')),
       prevTimeDev: toNum(get(raw, 'prevTimeDev')),
+      styleEst: get(raw, 'styleEst'),
       // 着差・PCI・クラス変動・距離適性は履歴の再構築が必要なため
       // ブラウザ側では取得不可(null=中立)。predict_today.pyでは有効。
       wkHas: null,

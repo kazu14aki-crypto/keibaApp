@@ -16,22 +16,35 @@ export default function RaceLoading({ label = 'データを確認中…' }) {
         .race-leg-b { animation: race-leg-b .34s ease-in-out infinite; transform-origin: top center; }
         @media (prefers-reduced-motion: reduce) { .race-loader, .race-loader-body, .race-leg-a, .race-leg-b { animation: none !important; } }
       `}</style>
-      <svg className="race-loader" width="164" height="92" viewBox="0 0 164 92" fill="none" aria-hidden="true">
-        <path d="M10 79H154" stroke={colors.cardBorder} strokeWidth="2" strokeLinecap="round" />
+      <svg className="race-loader" width="238" height="142" viewBox="0 0 238 142" fill="none" aria-hidden="true">
+        <path d="M8 121H230" stroke={colors.cardBorder} strokeWidth="2" strokeLinecap="round" />
+        <path d="M20 128H62M88 128H128M153 128H211" stroke={colors.gold} strokeOpacity=".25" strokeWidth="2" strokeLinecap="round" />
         <g className="race-loader-body">
-          <path d="M43 49C47 37 59 34 79 38C88 32 102 32 110 40L126 43C136 45 139 55 132 60L112 59C101 68 72 67 52 60L38 62L31 56L39 50Z" fill={colors.gold} />
-          <path d="M76 39L83 25L97 27L102 41" fill="#3d5a7a" />
-          <circle cx="90" cy="20" r="8" fill="#d8aa82" />
-          <path d="M83 18C86 10 96 10 99 18" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" />
-          <path d="M81 27L69 38" stroke="#3d5a7a" strokeWidth="6" strokeLinecap="round" />
-          <path d="M98 29L111 39" stroke="#3d5a7a" strokeWidth="6" strokeLinecap="round" />
-          <path d="M42 49L27 40L17 42L29 52" fill={colors.gold} />
-          <path d="M43 53L28 55" stroke="#2a2620" strokeWidth="3" strokeLinecap="round" />
-          <g className="race-leg-a"><path d="M60 62L53 78" stroke="#2a2620" strokeWidth="6" strokeLinecap="round" /><path d="M53 78L43 78" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" /></g>
-          <g className="race-leg-b"><path d="M83 63L91 78" stroke="#2a2620" strokeWidth="6" strokeLinecap="round" /><path d="M91 78L101 78" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" /></g>
-          <g className="race-leg-b"><path d="M105 61L101 77" stroke="#2a2620" strokeWidth="6" strokeLinecap="round" /><path d="M101 77L92 78" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" /></g>
-          <g className="race-leg-a"><path d="M119 59L128 76" stroke="#2a2620" strokeWidth="6" strokeLinecap="round" /><path d="M128 76L138 78" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" /></g>
-          <circle cx="126" cy="49" r="3" fill="#2a2620" />
+          {/* 頭・耳・首・胴・尾を分離し、競走馬の横姿が読み取れる形にする */}
+          <path d="M67 77C75 51 91 43 115 50C129 41 151 43 167 54C181 54 194 62 198 75C202 87 192 97 177 96C164 107 139 111 111 105C94 104 80 99 68 92L50 93L42 85L55 78Z" fill="#7a4a2e" />
+          <path d="M71 77C77 56 87 47 101 46L112 55L108 77L91 89Z" fill="#8d5735" />
+          <path d="M67 78L42 64L25 68L48 80" fill="#5c3724" />
+          <path d="M48 80L28 82" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" />
+          <path d="M99 48L103 31L110 43M107 45L119 29L120 46" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M73 72C85 68 94 70 106 77" stroke="#e2b36b" strokeWidth="3" strokeLinecap="round" opacity=".85" />
+          <path d="M62 83C57 84 52 87 48 90" stroke="#2a2620" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="103" cy="59" r="2.8" fill="#16130f" />
+          <path d="M107 67L119 70" stroke="#2a2620" strokeWidth="2.5" strokeLinecap="round" />
+          {/* 鞍・騎手（前傾）・ヘルメット・手綱 */}
+          <path d="M119 55C130 50 143 51 151 57L144 70H119Z" fill="#f0eee7" stroke="#2a2620" strokeWidth="2" />
+          <path d="M130 57L139 33L157 42L151 62Z" fill="#244766" />
+          <circle cx="148" cy="27" r="10" fill="#d9a47d" />
+          <path d="M138 26C141 16 154 15 159 25" fill="#b3493f" stroke="#2a2620" strokeWidth="2" />
+          <path d="M143 36L125 52" stroke="#244766" strokeWidth="7" strokeLinecap="round" />
+          <path d="M154 42L168 59" stroke="#244766" strokeWidth="7" strokeLinecap="round" />
+          <path d="M166 58L111 68" stroke="#2a2620" strokeWidth="2" strokeLinecap="round" />
+          <path d="M143 61L160 79" stroke="#f0eee7" strokeWidth="6" strokeLinecap="round" />
+          <path d="M160 79L177 80" stroke="#2a2620" strokeWidth="4" strokeLinecap="round" />
+          {/* 四肢：前後で位相をずらしたギャロップ */}
+          <g className="race-leg-a"><path d="M91 98L75 119" stroke="#2a2620" strokeWidth="8" strokeLinecap="round" /><path d="M75 119L62 119" stroke="#2a2620" strokeWidth="5" strokeLinecap="round" /></g>
+          <g className="race-leg-b"><path d="M112 102L119 120" stroke="#2a2620" strokeWidth="8" strokeLinecap="round" /><path d="M119 120L134 120" stroke="#2a2620" strokeWidth="5" strokeLinecap="round" /></g>
+          <g className="race-leg-b"><path d="M164 96L156 120" stroke="#2a2620" strokeWidth="8" strokeLinecap="round" /><path d="M156 120L145 120" stroke="#2a2620" strokeWidth="5" strokeLinecap="round" /></g>
+          <g className="race-leg-a"><path d="M178 94L194 118" stroke="#2a2620" strokeWidth="8" strokeLinecap="round" /><path d="M194 118L208 120" stroke="#2a2620" strokeWidth="5" strokeLinecap="round" /></g>
         </g>
       </svg>
       <div style={{ ...styles.loadingText, marginTop: 8 }}>{label}</div>
