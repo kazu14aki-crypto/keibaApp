@@ -1,5 +1,10 @@
 services:
   # --- バックエンド（FastAPI） ---
+  # 無料枠(750時間/月)を消費するのはこのWebサービスのみになる。
+  # 無通信15分でスリープ→リクエスト時に自動起動(初回数十秒)する仕組みのため、
+  # 個人利用なら実際の消費は月数十時間程度に収まる。
+  # 注意: UptimeRobot等の死活監視(keep-alive ping)を設定するとスリープしなくなり
+  #       枠を食い潰すので、絶対に設定しないこと。
   - type: web
     name: kirisuite-backend
     runtime: python
@@ -20,13 +25,21 @@ services:
       - key: ALLOWED_ORIGINS
         sync: false
 
-  # --- フロントエンド（React/Vite） ---
+  # --- フロントエンド（React/Vite → 静的サイト） ---
+  # 2026-07改訂: type:web(常時稼働のNodeサーバー=無料枠を24時間消費)から
+  # 静的サイトに変更。ビルド済みのdistを配信するだけなので、
+  # 稼働時間の概念がなく無料枠を一切消費しない(StockWaveJPのGitHub Pagesと同じ発想)。
   - type: web
     name: kirisuite-frontend
-    runtime: node
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
-    startCommand: npm run preview
+    staticPublishPath: dist
+    routes:
+      # SPA(react-router)のため、全パスをindex.htmlへ書き換える
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
         sync: false

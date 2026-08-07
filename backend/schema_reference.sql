@@ -16,6 +16,7 @@
 --   ALTER TABLE horses ADD COLUMN IF NOT EXISTS history JSONB;
 --   ALTER TABLE horses ADD COLUMN IF NOT EXISTS current_weight INTEGER DEFAULT 0;
 --   ALTER TABLE horses ADD COLUMN IF NOT EXISTS current_impost FLOAT DEFAULT 0.0;
+--   ALTER TABLE horses ADD COLUMN IF NOT EXISTS odds_captured_at TIMESTAMP;
 -- ============================================================
 
 create table if not exists races (
@@ -45,6 +46,8 @@ create table if not exists horses (
   current_weight integer default 0,
   current_impost float default 0.0,
   result_rank varchar default '',
+  odds float default 0,
+  odds_captured_at timestamp,
   note text default '',
   factors jsonb not null default '{"waku":0,"jockey":0,"pedigree":0,"time":0,"condition":0,"form":0,"season":3}',
   history jsonb default '{"前走":null,"前々走":null,"3走前":null,"4走前":null}',

@@ -8,6 +8,7 @@ import RaceListPage from './pages/RaceListPage';
 import RaceDetailPage from './pages/RaceDetailPage';
 import HorseSearchPage from './pages/HorseSearchPage';
 import StatsPage from './pages/StatsPage';
+import ModelPage from './pages/ModelPage';
 
 function RequireAuth({ children }) {
   const { authed, checking } = useAuth();
@@ -38,6 +39,7 @@ function AppRoutes() {
                 <Route path="/races/:raceId" element={<RaceDetailPage />} />
                 <Route path="/search" element={<HorseSearchPage />} />
                 <Route path="/stats" element={<StatsPage />} />
+                <Route path="/model" element={<ModelPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>

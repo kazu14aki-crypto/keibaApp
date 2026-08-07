@@ -5,6 +5,7 @@ import { totalScore, MAX_TOTAL, FACTOR_DEFS, TRACKS, SURFACES, CONDITIONS, STYLE
 import { calcWakuScore, getCourseRule } from '../lib/courseData';
 import { calcAutoFactorsFromHistory } from '../lib/historyScore';
 import { evaluateRaceTime } from '../lib/timeIndex';
+import ValueAnalysis from '../components/ValueAnalysis';
 import { styles } from '../styles';
 
 export default function RaceDetailPage() {
@@ -19,6 +20,8 @@ export default function RaceDetailPage() {
   const [urlImporting, setUrlImporting] = useState(false);
   const [urlError, setUrlError] = useState('');
   const fileInputRef = useRef(null);
+  const packInputRef = useRef(null);
+  const valueAnalysisRef = useRef(null);
 
   const load = useCallback(async () => {
     const data = await api.getRace(raceId);
@@ -125,6 +128,77 @@ export default function RaceDetailPage() {
     e.target.value = '';
   };
 
+  /**
+   * 解析パック(predict_today.py --json の出力)の取込。
+   * ローカルPythonが全履歴+調教データから計算した 脚質・調教評価・モデル予測 を
+   * 該当レースの馬に一括反映する。レースの照合は「馬番+馬名の一致数が最大の
+   * パック内レース」を自動選択(過半数一致が条件)する。
+   */
+  const handlePackImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    try {
+      const text = await file.text();
+      const pack = JSON.parse(text);
+      if (pack.kind !== 'kirisuite_analysis_pack' || !Array.isArray(pack.races)) {
+        showToast('解析パック形式ではありません（predict_today.py --json の出力を指定してください）');
+        return;
+      }
+      // 現在のレースと最も一致するパック内レースを探す(馬番+馬名 or 馬名のみで照合)
+      const norm = (s) => String(s || '').replace(/[\s　]/g, '');
+      let best = null;
+      let bestHits = 0;
+      for (const pr of pack.races) {
+        let hits = 0;
+        for (const h of race.horses) {
+          const m = pr.horses.find(p =>
+            (p.num === h.num && (!norm(h.name) || norm(p.name) === norm(h.name))) ||
+            (norm(h.name) && norm(p.name) === norm(h.name)));
+          if (m) hits += 1;
+        }
+        if (hits > bestHits) { bestHits = hits; best = pr; }
+      }
+      if (!best || bestHits < Math.max(2, Math.ceil(race.horses.length / 2))) {
+        showToast('このレースに一致するデータがパック内に見つかりません（馬番・馬名を確認してください）');
+        return;
+      }
+      let applied = 0;
+      const updates = [];
+      for (const h of race.horses) {
+        const p = best.horses.find(x =>
+          (x.num === h.num && (!norm(h.name) || norm(x.name) === norm(h.name))) ||
+          (norm(h.name) && norm(x.name) === norm(h.name)));
+        if (!p) continue;
+        const patch = {};
+        if (p.style) patch.style = p.style;
+        if (p.wk_score !== null && p.wk_score !== undefined) {
+          patch.factors = { ...h.factors, training: p.wk_score };
+        }
+        if (p.odds && !h.odds) patch.odds = p.odds;
+        // モデル予測はメモ欄の先頭に1行で記録(既存のパック行は置き換え)
+        const line = `[モデル] 勝率${(p.prob * 100).toFixed(1)}% EV${p.ev.toFixed(2)}`
+          + (p.wk_score !== null && p.wk_score !== undefined ? ` 調教${p.wk_score}/10` : ' 調教データなし');
+        const oldNote = (h.note || '').split('\n').filter(l => !l.startsWith('[モデル]')).join('\n');
+        patch.note = oldNote ? `${line}\n${oldNote}` : line;
+        updates.push({ id: h.id, patch });
+        applied += 1;
+      }
+      // 楽観更新 → API保存
+      setRace(r => ({
+        ...r,
+        horses: r.horses.map(h => {
+          const u = updates.find(x => x.id === h.id);
+          return u ? { ...h, ...u.patch } : h;
+        }),
+      }));
+      await Promise.all(updates.map(u => api.updateHorse(u.id, u.patch)));
+      showToast(`解析パックを${applied}頭に反映しました（脚質・調教評価・モデル予測）`);
+    } catch (err) {
+      showToast(err.message || '解析パックの読み込みに失敗しました');
+    }
+  };
+
   const handleJraUrlImport = async () => {
     if (!jraUrl.trim()) return;
     setUrlImporting(true);
@@ -161,7 +235,10 @@ export default function RaceDetailPage() {
         </button>
         <button style={styles.ghostBtn} onClick={() => fileInputRef.current?.click()}>⇧ 出馬表CSVを取り込む</button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleFile} />
+        <button style={styles.ghostBtn} onClick={() => packInputRef.current?.click()}>🧠 解析パック取込</button>
+        <input ref={packInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={handlePackImport} />
         <button style={styles.primaryBtn} onClick={autoCalculate}>⚡ 採点基準を自動計算（全項目）</button>
+        {ranked.length > 0 && <button style={styles.ghostBtn} onClick={() => valueAnalysisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>💰 オッズ・妙味分析へ</button>}
       </div>
 
       <div style={styles.toolbarHint}>
@@ -187,7 +264,7 @@ export default function RaceDetailPage() {
           </div>
           {urlError && <div style={styles.errorText}>{urlError}</div>}
           <div style={{ ...styles.toolbarHint, marginTop: 10 }}>
-            JRA公式サイトの出馬表ページ（jra.go.jp）のURLを貼り付けてください。馬番・枠番・馬名・騎手・血統を自動取得します（既存の出走馬は上書きされます）。脚質は自動取得できないため後で手動調整してください。サイト構造の変更により取得に失敗する場合は、CSV取込みをご利用ください。
+            JRA公式サイトの出馬表ページ（jra.go.jp）のURLを貼り付けてください。馬番・枠番・馬名・騎手・血統を自動取得します（既存の出走馬は上書きされます）。脚質はJRAページから取得できないため、「解析パック取込」で自動設定するか手動調整してください。サイト構造の変更により取得に失敗する場合は、CSV取込みをご利用ください。
           </div>
         </div>
       )}
@@ -222,8 +299,17 @@ export default function RaceDetailPage() {
       </div>
 
       {ranked.length > 0 && (
+        <div ref={valueAnalysisRef}>
+          <ValueAnalysis
+            horses={ranked}
+            onUpdateOdds={(horseId, odds) => updateHorse(horseId, { odds })}
+          />
+        </div>
+      )}
+
+      {ranked.length > 0 && (
         <div style={styles.legendNote}>
-          採点は{MAX_TOTAL}点満点（枠順・騎手・血統・タイム指数・同コース実績 各20点、馬場適性・臨戦状態 各10点、斤量10点、季節・気温適性 5点）。
+          採点は{MAX_TOTAL}点満点（枠順・騎手・血統・タイム指数・同コース実績 各20点、馬場適性・臨戦状態・調教評価・斤量 各10点、季節・気温適性 5点）。調教評価と脚質は「解析パック取込」で自動入力できます。
         </div>
       )}
 

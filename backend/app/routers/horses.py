@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, or_
@@ -46,6 +47,9 @@ def update_horse(horse_id: str, payload: HorseUpdate, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="更新内容がありません。")
     for k, v in patch.items():
         setattr(horse, k, v)
+    if "odds" in patch:
+        # 取得時刻はサーバー側で記録し、クライアント時計に依存しない。
+        horse.odds_captured_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(horse)
     return horse.to_dict()

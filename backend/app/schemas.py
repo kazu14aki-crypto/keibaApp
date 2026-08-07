@@ -39,6 +39,7 @@ class HorseFactors(BaseModel):
     time: int = 0
     condition: int = 0
     form: int = 0
+    training: int = 5      # 調教評価(解析パック取込で自動入力/手動調整可)
     season: int = 3
     impost: int = 5
     sameCourse: int = 10
@@ -72,6 +73,7 @@ class HorseUpdate(BaseModel):
     current_impost: Optional[float] = None
     result_rank: Optional[str] = None
     course_record: Optional[str] = None
+    odds: Optional[float] = None
     note: Optional[str] = None
     factors: Optional[HorseFactors] = None
 

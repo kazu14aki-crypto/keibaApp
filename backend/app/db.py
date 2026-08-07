@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, date as date_type
-from sqlalchemy import create_engine, String, Integer, Float, Text, Date, DateTime, ForeignKey, JSON
+from sqlalchemy import create_engine, String, Integer, Float, Text, Date, DateTime, ForeignKey, JSON, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -18,7 +18,7 @@ def gen_uuid() -> str:
     return str(uuid.uuid4())
 
 
-DEFAULT_FACTORS = {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "season": 3, "impost": 5, "sameCourse": 10}
+DEFAULT_FACTORS = {"waku": 0, "jockey": 0, "pedigree": 0, "time": 0, "condition": 0, "form": 0, "training": 5, "season": 3, "impost": 5, "sameCourse": 10}
 
 
 class Race(Base):
@@ -72,6 +72,9 @@ class Horse(Base):
     current_impost: Mapped[float] = mapped_column(Float, nullable=True, default=0.0)
     result_rank: Mapped[str] = mapped_column(String, nullable=True, default="")
     course_record: Mapped[str] = mapped_column(String, nullable=True, default="")  # 例: "2-1-0-3" (1着-2着-3着-着外)
+    odds: Mapped[float] = mapped_column(Float, nullable=True, default=0.0)  # 発走直前の単勝オッズ(期待値分析用)
+    # オッズだけでは確定後入力による情報リークを検知できないため、取得時刻も残す。
+    odds_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str] = mapped_column(Text, nullable=True, default="")
     factors: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: dict(DEFAULT_FACTORS))
     history: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {"前走": None, "前々走": None, "3走前": None, "4走前": None})
@@ -95,6 +98,8 @@ class Horse(Base):
             "current_impost": self.current_impost or 0.0,
             "result_rank": self.result_rank,
             "course_record": self.course_record or "",
+            "odds": self.odds or 0.0,
+            "odds_captured_at": self.odds_captured_at.isoformat() if self.odds_captured_at else None,
             "note": self.note,
             "factors": self.factors or dict(DEFAULT_FACTORS),
             "history": self.history or {"前走": None, "前々走": None, "3走前": None, "4走前": None},
@@ -114,8 +119,13 @@ class Horse(Base):
 
 
 def init_db():
-    """テーブルが無ければ作成する（初回起動時に自動実行）。"""
+    """テーブル作成と、既存環境への後方互換な軽量マイグレーション。"""
     Base.metadata.create_all(engine)
+    # create_all() は既存テーブルへ列を足さない。新しいオッズ監査列だけは
+    # 起動時に安全に追加し、デプロイ後すぐ記録を始められるようにする。
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE horses ADD COLUMN IF NOT EXISTS odds_captured_at TIMESTAMP"))
 
 
 def get_db():

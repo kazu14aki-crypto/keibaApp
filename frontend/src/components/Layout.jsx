@@ -27,6 +27,7 @@ export default function Layout({ children }) {
               <button style={{ ...styles.navBtn, ...(isActive('/') ? styles.navBtnActive : {}) }} onClick={() => navigate('/')}>出馬表</button>
               <button style={{ ...styles.navBtn, ...(isActive('/search') ? styles.navBtnActive : {}) }} onClick={() => navigate('/search')}>馬名検索</button>
               <button style={{ ...styles.navBtn, ...(isActive('/stats') ? styles.navBtnActive : {}) }} onClick={() => navigate('/stats')}>傾向分析</button>
+              <button style={{ ...styles.navBtn, ...(isActive('/model') ? styles.navBtnActive : {}) }} onClick={() => navigate('/model')}>モデル予測</button>
             </nav>
             <button style={styles.logoutBtn} onClick={logout}>ログアウト</button>
           </div>
