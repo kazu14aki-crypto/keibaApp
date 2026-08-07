@@ -12,7 +12,7 @@ import { styles } from '../styles';
 export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
-  const [race, setRace] = useState(null);
+  const [race, setRace] = useState(() => api.getCachedRace(raceId));
   const [expandedId, setExpandedId] = useState(null);
   const [editingHead, setEditingHead] = useState(false);
   const [toast, setToast] = useState(null);
@@ -24,12 +24,21 @@ export default function RaceDetailPage() {
   const packInputRef = useRef(null);
   const valueAnalysisRef = useRef(null);
 
-  const load = useCallback(async () => {
-    const data = await api.getRace(raceId);
+  const load = useCallback(async (refresh = false) => {
+    const data = await (refresh ? api.refreshRace(raceId) : api.getRace(raceId));
     setRace(data);
   }, [raceId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    const cached = api.getCachedRace(raceId);
+    setRace(cached);
+    if (cached) return () => { active = false; };
+    load().catch(() => {
+      if (active) setRace(null);
+    });
+    return () => { active = false; };
+  }, [load, raceId]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
 
@@ -132,7 +141,7 @@ export default function RaceDetailPage() {
     try {
       const res = await api.importCsv(raceId, file);
       showToast(`${res.imported}頭を取り込みました`);
-      await load();
+      await load(true);
     } catch (err) {
       showToast(err.message || '取り込みに失敗しました');
     }
@@ -219,7 +228,7 @@ export default function RaceDetailPage() {
       showToast(`${res.imported}頭を取り込みました`);
       setJraUrl('');
       setShowUrlForm(false);
-      await load();
+      await load(true);
     } catch (err) {
       setUrlError(err.message || '取り込みに失敗しました。JRAサイトの構造が変わっている可能性があります。手動CSV取込みもお試しください。');
     } finally {

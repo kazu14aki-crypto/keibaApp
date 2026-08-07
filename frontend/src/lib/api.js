@@ -1,5 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'kirisuite_token';
+const RACE_CACHE_PREFIX = 'kirisuite_race_';
+const RACE_CACHE_MS = 2 * 60 * 1000;
+const raceRequests = new Map();
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -44,12 +47,51 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+function readCachedRace(id) {
+  try {
+    const raw = sessionStorage.getItem(`${RACE_CACHE_PREFIX}${id}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached?.data || Date.now() - cached.savedAt > RACE_CACHE_MS) {
+      sessionStorage.removeItem(`${RACE_CACHE_PREFIX}${id}`);
+      return null;
+    }
+    return cached.data;
+  } catch {
+    return null;
+  }
+}
+
+function cacheRace(id, data) {
+  try {
+    sessionStorage.setItem(`${RACE_CACHE_PREFIX}${id}`, JSON.stringify({ savedAt: Date.now(), data }));
+  } catch {
+    // Storage is only a speed-up; the API response remains authoritative.
+  }
+  return data;
+}
+
+function fetchRace(id) {
+  if (raceRequests.has(id)) return raceRequests.get(id);
+  const pending = request(`/races/${id}`)
+    .then(data => cacheRace(id, data))
+    .finally(() => raceRequests.delete(id));
+  raceRequests.set(id, pending);
+  return pending;
+}
+
 export const api = {
   login: (password) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
 
   listRaces: () => request('/races'),
-  getRace: (id) => request(`/races/${id}`),
+  getCachedRace: (id) => readCachedRace(id),
+  getRace: (id) => readCachedRace(id) || fetchRace(id),
+  prefetchRace: (id) => readCachedRace(id) ? Promise.resolve(readCachedRace(id)) : fetchRace(id),
+  refreshRace: (id) => {
+    try { sessionStorage.removeItem(`${RACE_CACHE_PREFIX}${id}`); } catch { /* noop */ }
+    return fetchRace(id);
+  },
   createRace: (data) => request('/races', { method: 'POST', body: JSON.stringify(data) }),
   updateRace: (id, data) => request(`/races/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteRace: (id) => request(`/races/${id}`, { method: 'DELETE' }),

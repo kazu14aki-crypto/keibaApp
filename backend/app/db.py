@@ -59,7 +59,7 @@ class Horse(Base):
     __tablename__ = "horses"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
-    race_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("races.id", ondelete="CASCADE"))
+    race_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("races.id", ondelete="CASCADE"), index=True)
     num: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     waku: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     name: Mapped[str] = mapped_column(String, nullable=True, default="")
@@ -127,6 +127,7 @@ def init_db():
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE horses ADD COLUMN IF NOT EXISTS odds_captured_at TIMESTAMP"))
             conn.execute(text("ALTER TABLE horses ALTER COLUMN style SET DEFAULT '未判定'"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_horses_race_id ON horses (race_id)"))
 
 
 def get_db():

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 
 from app.db import get_db, Race
@@ -18,7 +18,8 @@ def list_races(db: Session = Depends(get_db)):
 
 @router.get("/{race_id}")
 def get_race(race_id: str, db: Session = Depends(get_db)):
-    race = db.get(Race, race_id)
+    stmt = select(Race).options(joinedload(Race.horses)).where(Race.id == race_id)
+    race = db.execute(stmt).unique().scalar_one_or_none()
     if not race:
         raise HTTPException(status_code=404, detail="レースが見つかりません。")
     return race.to_dict(include_horses=True)
