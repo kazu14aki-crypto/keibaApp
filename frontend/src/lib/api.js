@@ -1,8 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'kirisuite_token';
-const RACE_CACHE_PREFIX = 'kirisuite_race_';
 const RACE_CACHE_MS = 2 * 60 * 1000;
 const raceRequests = new Map();
+const raceCache = new Map();
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -48,27 +48,32 @@ async function request(path, options = {}) {
 }
 
 function readCachedRace(id) {
-  try {
-    const raw = sessionStorage.getItem(`${RACE_CACHE_PREFIX}${id}`);
-    if (!raw) return null;
-    const cached = JSON.parse(raw);
-    if (!cached?.data || Date.now() - cached.savedAt > RACE_CACHE_MS) {
-      sessionStorage.removeItem(`${RACE_CACHE_PREFIX}${id}`);
-      return null;
-    }
-    return cached.data;
-  } catch {
+  const cached = raceCache.get(id);
+  if (!cached) return null;
+  if (Date.now() - cached.savedAt > RACE_CACHE_MS) {
+    raceCache.delete(id);
     return null;
   }
+  return cached.data;
 }
 
 function cacheRace(id, data) {
-  try {
-    sessionStorage.setItem(`${RACE_CACHE_PREFIX}${id}`, JSON.stringify({ savedAt: Date.now(), data }));
-  } catch {
-    // Storage is only a speed-up; the API response remains authoritative.
-  }
+  // 大きな過去走JSONをsessionStorageへ同期書込みするとメインスレッドが止まるため、
+  // タブ内のメモリだけに短時間保持する。
+  raceCache.set(id, { savedAt: Date.now(), data });
   return data;
+}
+
+function invalidateRace(id) {
+  raceCache.delete(id);
+}
+
+function invalidateRaceContainingHorse(horseId) {
+  for (const [raceId, cached] of raceCache.entries()) {
+    if (cached.data?.horses?.some(horse => horse.id === horseId)) {
+      raceCache.delete(raceId);
+    }
+  }
 }
 
 function fetchRace(id) {
@@ -87,18 +92,26 @@ export const api = {
   listRaces: () => request('/races'),
   getCachedRace: (id) => readCachedRace(id),
   getRace: (id) => readCachedRace(id) || fetchRace(id),
-  prefetchRace: (id) => readCachedRace(id) ? Promise.resolve(readCachedRace(id)) : fetchRace(id),
+  prefetchRace: (id) => {
+    const cached = readCachedRace(id);
+    return cached ? Promise.resolve(cached) : fetchRace(id);
+  },
   refreshRace: (id) => {
-    try { sessionStorage.removeItem(`${RACE_CACHE_PREFIX}${id}`); } catch { /* noop */ }
+    invalidateRace(id);
     return fetchRace(id);
   },
   createRace: (data) => request('/races', { method: 'POST', body: JSON.stringify(data) }),
-  updateRace: (id, data) => request(`/races/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteRace: (id) => request(`/races/${id}`, { method: 'DELETE' }),
+  updateRace: (id, data) => request(`/races/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    .then(result => { invalidateRace(id); return result; }),
+  deleteRace: (id) => request(`/races/${id}`, { method: 'DELETE' })
+    .then(result => { invalidateRace(id); return result; }),
 
-  addHorse: (raceId, data) => request(`/horses/race/${raceId}`, { method: 'POST', body: JSON.stringify(data) }),
-  updateHorse: (id, data) => request(`/horses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteHorse: (id) => request(`/horses/${id}`, { method: 'DELETE' }),
+  addHorse: (raceId, data) => request(`/horses/race/${raceId}`, { method: 'POST', body: JSON.stringify(data) })
+    .then(result => { invalidateRace(raceId); return result; }),
+  updateHorse: (id, data) => request(`/horses/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    .then(result => { invalidateRaceContainingHorse(id); return result; }),
+  deleteHorse: (id) => request(`/horses/${id}`, { method: 'DELETE' })
+    .then(result => { invalidateRaceContainingHorse(id); return result; }),
   searchHorses: (q) => request(`/horses/search?q=${encodeURIComponent(q)}`),
   importCsv: (raceId, file) => {
     const form = new FormData();

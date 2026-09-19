@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.config import APP_PASSWORD, ALLOWED_ORIGINS
 from app.auth import create_access_token, require_auth
@@ -8,6 +9,9 @@ from app.db import init_db
 from app.routers import races, horses
 
 app = FastAPI(title="競走馬スコアリング API")
+
+# 過去走を含むレース詳細JSONは大きくなるため、転送前に圧縮する。
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

@@ -19,14 +19,6 @@ export default function RaceListPage() {
     setRaces(data);
   };
 
-  useEffect(() => {
-    if (!races?.length) return undefined;
-    const timer = window.setTimeout(() => {
-      races.slice(0, 3).forEach(race => { api.prefetchRace(race.id).catch(() => undefined); });
-    }, 350);
-    return () => window.clearTimeout(timer);
-  }, [races]);
-
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
 
   const submit = async (e) => {
@@ -167,10 +159,15 @@ function EmptyState({ onCreate }) {
 }
 
 function RaceCard({ race, onOpen, onPrefetch, onDelete }) {
-  const [horseCount, setHorseCount] = useState(race.horse_count ?? null);
   return (
     <div style={styles.raceCard}>
-      <div style={styles.raceCardTop} onClick={onOpen} onMouseEnter={() => onPrefetch().catch(() => undefined)} onTouchStart={() => onPrefetch().catch(() => undefined)}>
+      <div
+        style={styles.raceCardTop}
+        onClick={onOpen}
+        onMouseEnter={() => onPrefetch().catch(() => undefined)}
+        onFocus={() => onPrefetch().catch(() => undefined)}
+        onTouchStart={() => onPrefetch().catch(() => undefined)}
+      >
         <div style={styles.raceCardHead}>
           {race.grade ? <span style={styles.gradeTag}>{race.grade}</span> : <span />}
           <span style={styles.raceDate}>{race.date || '日付未設定'}</span>
