@@ -114,7 +114,32 @@ def load_local(path):
         row for row in runner_rows
         if row["horse_id"] and row["horse_id"] == latest_ids[row["name"]][1]
     ]
-    return runner_rows, kikuka_rows, coverage_min, coverage_max
+    target_races = {race_key(row) for row in runner_rows}
+    all_target_race_rows = []
+    with path.open(encoding="cp932", newline="") as handle:
+        for raw in csv.DictReader(handle):
+            row = normalize_raw(raw)
+            if race_key(row) in target_races:
+                all_target_race_rows.append(row)
+    return runner_rows, all_target_race_rows, kikuka_rows, coverage_min, coverage_max
+
+
+def load_recent_fields(path):
+    rows = []
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        for raw in csv.DictReader(handle):
+            row = {key: value.strip() for key, value in raw.items()}
+            for key in ("distance", "headcount", "finish", "num", "popularity", "corner1", "corner2", "corner3", "corner4", "weight"):
+                row[key] = integer(row.get(key))
+            for key in ("impost", "odds", "run_time", "last3f"):
+                row[key] = number(row.get(key))
+            row["class_code"] = ""
+            row["source"] = "web_result"
+            row["source_url"] = ""
+            row["margin"] = None
+            row["pci"] = None
+            rows.append(row)
+    return rows
 
 
 def load_supplement(path):
@@ -180,6 +205,67 @@ def field_score(row):
 def mean(values):
     values = [value for value in values if value is not None]
     return sum(values) / len(values) if values else 0.0
+
+
+def rank_value(value, values):
+    if value is None:
+        return None
+    ordered = sorted(item for item in values if item is not None)
+    return ordered.index(value) + 1
+
+
+def enrich_race_fields(rows):
+    grouped = defaultdict(list)
+    for row in rows:
+        grouped[race_key(row)].append(row)
+    enriched = []
+    comparisons = []
+    for key, field in sorted(grouped.items()):
+        target_names = sorted({row["name"] for row in field if row["name"] in RUNNERS})
+        if not target_names:
+            continue
+        times = [row.get("run_time") for row in field]
+        last3fs = [row.get("last3f") for row in field]
+        winner_time = min((value for value in times if value is not None), default=None)
+        best_last3f = min((value for value in last3fs if value is not None), default=None)
+        winner = min(field, key=lambda row: row.get("finish") or 999)
+        fastest = min(field, key=lambda row: row.get("last3f") if row.get("last3f") is not None else 999)
+        for source_row in field:
+            row = dict(source_row)
+            row["target_flag"] = 1 if row["name"] in RUNNERS else 0
+            row["target_names_in_race"] = "、".join(target_names)
+            row["time_behind_winner"] = (
+                round(row["run_time"] - winner_time, 1)
+                if row.get("run_time") is not None and winner_time is not None else None
+            )
+            row["last3f_diff_to_best"] = (
+                round(row["last3f"] - best_last3f, 1)
+                if row.get("last3f") is not None and best_last3f is not None else None
+            )
+            row["field_time_rank"] = rank_value(row.get("run_time"), times)
+            row["field_last3f_rank"] = rank_value(row.get("last3f"), last3fs)
+            row["finish_percentile"] = round(field_score(row), 4)
+            enriched.append(row)
+        reported = max((row.get("headcount") or 0 for row in field), default=0)
+        if len(field) == reported:
+            coverage = "完全"
+        elif reported - len(field) == 1:
+            coverage = "完全（取消除く）"
+        else:
+            coverage = "要確認"
+        comparisons.append({
+            "date": key[0], "track": key[1], "race_no": key[2], "race_name": key[3],
+            "surface": winner.get("surface"), "distance": winner.get("distance"),
+            "going": winner.get("going"), "field_rows": len(field),
+            "reported_headcount": reported, "coverage_status": coverage,
+            "target_count": len(target_names), "target_names": "、".join(target_names),
+            "winner": winner.get("name"), "winner_time": winner_time,
+            "fastest_last3f_horse": fastest.get("name"), "best_last3f": best_last3f,
+            "avg_last3f": round(mean(last3fs), 2),
+            "source": winner.get("source"), "source_url": winner.get("source_url", ""),
+        })
+    enriched.sort(key=lambda row: (row["date"], row["track"], integer(row["race_no"], 0), row.get("finish") or 999))
+    return enriched, comparisons
 
 
 def pct(count, total):
@@ -355,19 +441,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default="backtest/input.csv")
     parser.add_argument("--supplement", default="backtest/kikuka_2026_supplement.csv")
+    parser.add_argument("--recent-fields", default="backtest/kikuka_2026_recent_fields.csv")
     parser.add_argument("--laps", default="backtest/kikuka_race_laps.csv")
     parser.add_argument("--out", default="backtest/reports/kikuka_2026_2026-10-22")
     args = parser.parse_args()
 
-    runner_rows, kikuka_rows, coverage_min, coverage_max = load_local(Path(args.input))
+    runner_rows, local_field_rows, kikuka_rows, coverage_min, coverage_max = load_local(Path(args.input))
+    recent_field_rows = load_recent_fields(Path(args.recent_fields))
     supplement = load_supplement(Path(args.supplement))
     history = sorted(runner_rows + supplement, key=lambda row: (row["name"], row["date"]))
+    all_participants, race_comparison = enrich_race_fields(local_field_rows + recent_field_rows)
     laps = load_laps(Path(args.laps))
     ranking = summarize_runners(history)
     kikuka_summary = summarize_kikuka(kikuka_rows, laps)
     out = Path(args.out)
     write_csv(out / "runner_history.csv", history)
     write_csv(out / "runner_summary.csv", ranking)
+    write_csv(out / "race_comparison.csv", race_comparison)
+    write_csv(out / "all_race_participants.csv", all_participants)
     write_csv(out / "prediction.csv", PREDICTION)
     write_csv(out / "past_kikuka_all_runners.csv", sorted(kikuka_rows, key=lambda row: (row["date"], row["finish"] or 99)))
     write_csv(out / "past_kikuka_summary.csv", kikuka_summary)
@@ -375,6 +466,9 @@ def main():
     write_summary(out / "summary.md", coverage_min, coverage_max, history, ranking, kikuka_summary, laps)
     print(f"output={out.resolve()}")
     print(f"runner_history={len(history)}")
+    print(f"target_races={len(race_comparison)}")
+    print(f"all_race_participants={len(all_participants)}")
+    print(f"complete_races={sum(row['coverage_status'].startswith('完全') for row in race_comparison)}")
     print(f"kikuka_rows={len(kikuka_rows)}")
     print("ranking=" + ", ".join(f"{r['name']}:{r['composite_score']:.2f}" for r in ranking[:8]))
 
